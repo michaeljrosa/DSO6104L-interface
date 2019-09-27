@@ -229,8 +229,7 @@ def init_spi():
     
     spi.close()
     
-    
-def num_from_ascii(txt):
+def ascii_to_num(txt):
     sign = 1 if txt[0] == 43 else -1
     
     try:
@@ -250,171 +249,77 @@ def num_from_ascii(txt):
             mult = mult / 10
     return num * sign
     
+def num_to_ascii(num, is_integer):
+    sign = b'+' if num >= 0 else b'-'
+    if is_integer:
+        return sign + str(abs(floor(num))).encode()
+    else:
+        return sign + str(num).encode()
+    
 def cw_action_ch1_sc():
-    cmd = b'CHAN1:SCAL?\r\n'
-    Sock.sendall(cmd)
-    sleep(0.1)
-    
-    reply = get_reply()
-    reply = reply[::-1]
-    reply = reply[4:]
-    start = reply.index(b'\n')
-    reply = reply[:start]
-    reply = reply[::-1]
-    
-    num_end = reply.index(b'E')
-    num = reply[:num_end]
-    exp = reply[num_end+1:]
-    
-    num_conv = num_from_ascii(num)
-    exp_conv = num_from_ascii(exp)
-    
     # deal with probe attenuation factor here
     # fine adjustment?
     
-    if (num_conv * 10 ** exp_conv < 5):
-        if (num[1:2] == b'1'):
-            num_conv = num_conv * 2
-        elif (num[1:2] == b'2'):
-            num_conv = num_conv * 2.5
-        elif (num[1:2] == b'5'):
-            num_conv = num_conv * 2 / 10
-            exp_conv += 1
+    if (Scope.ch1_scale < 5):
+        if (Scope.ch1_scale_base_b[1:2] == b'1'):
+            Scope.ch1_scale_base = Scope.ch1_scale_base * 2
+            Scope.ch1_offset = Scope.ch1_offset * 2
+        elif (Scope.ch1_scale_base_b[1:2] == b'2'):
+            Scope.ch1_scale_base = Scope.ch1_scale_base * 2.5
+            Scope.ch1_offset = Scope.ch1_offset * 2.5
+        elif (Scope.ch1_scale_base_b[1:2] == b'5'):
+            Scope.ch1_scale_base = Scope.ch1_scale_base * 2 / 10
+            Scope.ch1_offset = Scope.ch1_offset * 2 / 10
+            Scope.ch1_scale_exp += 1
+            
+        #update state
+        Scope.ch1_scale = Scope.ch1_scale_base * 10 ** Scope.ch1_scale_exp
+        Scope.ch1_scale_base_b = num_to_ascii(Scope.ch1_scale_base, False)
+        Scope.ch1_scale_exp_b = num_to_ascii(Scope.ch1_scale_exp, True)
         
-        
-        num = str(num_conv).encode()
-        exp = exp[0:1] + str(abs(floor(exp_conv))).encode()
-        cmd = b'CHAN1:SCAL +' + num + b'E' + exp + b'V\r\n'
+        cmd = b'CHAN1:SCAL ' + Scope.ch1_scale_base_b + b'E' + Scope.ch1_scale_exp_b + b'V\r\n'
+        #print(cmd)
         Sock.sendall(cmd)
         
     
 def ccw_action_ch1_sc():
-    cmd = b'CHAN1:SCAL?\r\n'
-    Sock.sendall(cmd)
-    sleep(0.1)
-    
-    reply = get_reply()
-    reply = reply[::-1]
-    reply = reply[4:]
-    start = reply.index(b'\n')
-    reply = reply[:start]
-    reply = reply[::-1]
-    
-    num_end = reply.index(b'E')
-    num = reply[:num_end]
-    exp = reply[num_end+1:]
-    
-    num_conv = num_from_ascii(num)
-    exp_conv = num_from_ascii(exp)
-    
     # deal with probe attenuation factor here
     # fine adjustment?
     
-    if (num_conv * 10 ** exp_conv > 0.002):
-        if (num[1:2] == b'1'):
-            num_conv = num_conv / 2
-        elif (num[1:2] == b'2'):
-            num_conv = num_conv / 2
-        elif (num[1:2] == b'5'):
-            num_conv = num_conv * 2 / 5
+    if (Scope.ch1_scale > 0.002):
+        if (Scope.ch1_scale_base_b[1:2] == b'1'):
+            Scope.ch1_scale_base = Scope.ch1_scale_base / 2 * 10
+            Scope.ch1_offset = Scope.ch1_offset * 2 / 10
+            Scope.ch1_scale_exp -= 1
+        elif (Scope.ch1_scale_base_b[1:2] == b'2'):
+            Scope.ch1_scale_base = Scope.ch1_scale_base / 2
+            Scope.ch1_offset = Scope.ch1_offset / 2
+        elif (Scope.ch1_scale_base_b[1:2] == b'5'):
+            Scope.ch1_scale_base = Scope.ch1_scale_base * 2 / 5
+            Scope.ch1_offset = Scope.ch1_offset * 2 / 5
         
+        #update state
+        Scope.ch1_scale = Scope.ch1_scale_base * 10 ** Scope.ch1_scale_exp
+        Scope.ch1_scale_base_b = num_to_ascii(Scope.ch1_scale_base, False)
+        Scope.ch1_scale_exp_b = num_to_ascii(Scope.ch1_scale_exp, True)
         
-        num = str(num_conv).encode()
-        exp = exp[0:1] + str(abs(floor(exp_conv))).encode()
-        cmd = b'CHAN1:SCAL +' + num + b'E' + exp + b'V\r\n'
+        cmd = b'CHAN1:SCAL ' + Scope.ch1_scale_base_b + b'E' + Scope.ch1_scale_exp_b + b'V\r\n'
+        #print(cmd)
         Sock.sendall(cmd)
 
 
-def cw_ch1_offset():
-    cmd = b'CHAN1:SCAL?\r\n'
-    Sock.sendall(cmd)
-    sleep(0.1)
-    reply = get_reply()
-    reply = reply[::-1]
-    reply = reply[4:]
-    start = reply.index(b'\n')
-    reply = reply[:start]
-    reply = reply[::-1]
-    
-    num_end = reply.index(b'E')
-    num = reply[:num_end]
-    exp = reply[num_end+1:]
-    
-    num_conv = num_from_ascii(num)
-    exp_conv = num_from_ascii(exp)
-    
-    step = 0.125 * num_conv * 10 ** exp_conv
-    
-    cmd = b'CHAN1:OFFS?\r\n'
-    Sock.sendall(cmd)
-    sleep(0.1)
-    reply = get_reply()
-    reply = reply[::-1]
-    reply = reply[4:]
-    start = reply.index(b'\n')
-    reply = reply[:start]
-    reply = reply[::-1]
-    
-    num_end = reply.index(b'E')
-    num = reply[:num_end]
-    exp = reply[num_end+1:]
-    
-    num_conv = num_from_ascii(num)
-    exp_conv = num_from_ascii(exp)
-    
-    offset = num_conv * 10 ** exp_conv + step
-    offset = "{:.6E}".format(offset).encode()
-    
-    cmd = b'CHAN1:OFFS ' + offset + b'V\r\n'
-    print(cmd)
-    Sock.sendall(cmd)
-    
 def ccw_ch1_offset():
-    #can definitely make this more efficient by making a subclass
-    #and giving it a step field, have it only be updated whenever the channel scale is updated
-    #might fuck up with a default setup tho
-    #but i also know when I send that
-    cmd = b'CHAN1:SCAL?\r\n'
+    step = 0.125 * Scope.ch1_scale
+    Scope.ch1_offset += step
+    
+    cmd = b'CHAN1:OFFS ' + "{:.6E}".format(Scope.ch1_offset).encode() + b'V\r\n'
     Sock.sendall(cmd)
-    sleep(0.1)
-    reply = get_reply()
-    reply = reply[::-1]
-    reply = reply[4:]
-    start = reply.index(b'\n')
-    reply = reply[:start]
-    reply = reply[::-1]
     
-    num_end = reply.index(b'E')
-    num = reply[:num_end]
-    exp = reply[num_end+1:]
+def cw_ch1_offset():
+    step = 0.125 * Scope.ch1_scale
+    Scope.ch1_offset -= step
     
-    num_conv = num_from_ascii(num)
-    exp_conv = num_from_ascii(exp)
-    
-    step = 0.125 * num_conv * 10 ** exp_conv
-    
-    cmd = b'CHAN1:OFFS?\r\n'
-    Sock.sendall(cmd)
-    sleep(0.1)
-    reply = get_reply()
-    reply = reply[::-1]
-    reply = reply[4:]
-    start = reply.index(b'\n')
-    reply = reply[:start]
-    reply = reply[::-1]
-    
-    num_end = reply.index(b'E')
-    num = reply[:num_end]
-    exp = reply[num_end+1:]
-    
-    num_conv = num_from_ascii(num)
-    exp_conv = num_from_ascii(exp)
-    
-    offset = num_conv * 10 ** exp_conv - step
-    offset = "{:.6E}".format(offset).encode()
-    
-    cmd = b'CHAN1:OFFS ' + offset + b'V\r\n'
-    print(cmd)
+    cmd = b'CHAN1:OFFS ' + "{:.6E}".format(Scope.ch1_offset).encode() + b'V\r\n'
     Sock.sendall(cmd)
     
 def init_encoders():
@@ -469,6 +374,7 @@ def button_press(row, col):
             Sock.sendall(cmd)
             sleep(0.01)
             reply = get_reply()
+            print(reply)
             reply = reply[::-1]
             
             oscr = 0
@@ -560,6 +466,7 @@ def button_press(row, col):
             lcd.write_string("Ch2")
         elif (col & C3):
             lcd.write_string("Ch1 offset")
+            Scope.ch1_offset = 0
             cmd = b'CHAN1:OFFS +0E+0V\r\n'
             Sock.sendall(cmd)
         elif (col & C4):
@@ -760,7 +667,63 @@ def main():
         disable_backlight()
         GPIO.cleanup()
         exit()
+        
 
+class Scope:
+    # ch1
+    ch1_enabled = False
+    ch1_probe_aten = 0
+    ch1_scale_base_b = 0
+    ch1_scale_base = 0
+    ch1_scale_exp_b = 0
+    ch1_scale_exp = 0
+    ch1_scale = 0
+    ch1_offset = 0
+    ch1_offset_b = 0
+    
+    def __init__(self):
+        self.get_state()
+    
+    def get_state(self):
+        cmd = b'CHAN1:SCAL?\r\n'
+        Sock.sendall(cmd)
+        sleep(0.1)
+        
+        reply = get_reply()
+        reply = reply[::-1]
+        reply = reply[4:]
+        start = reply.index(b'\n')
+        reply = reply[:start]
+        reply = reply[::-1]
+        
+        num_end = reply.index(b'E')
+        self.ch1_scale_base_b = reply[:num_end]
+        self.ch1_scale_exp_b = reply[num_end+1:]
+        
+        self.ch1_scale_base = ascii_to_num(self.ch1_scale_base_b)
+        self.ch1_scale_exp = ascii_to_num(self.ch1_scale_exp_b)
+        
+        self.ch1_scale = self.ch1_scale_base * 10 ** self.ch1_scale_exp
+        
+        cmd = b'CHAN1:OFFS?\r\n'
+        Sock.sendall(cmd)
+        sleep(0.1)
+        reply = get_reply()
+        reply = reply[::-1]
+        reply = reply[4:]
+        start = reply.index(b'\n')
+        reply = reply[:start]
+        reply = reply[::-1]
+        
+        base_end = reply.index(b'E')
+        base = reply[:base_end]
+        exp = reply[num_end+1:]
+        base = ascii_to_num(base)
+        exp = ascii_to_num(exp)
+        
+        Scope.ch1_offset = base * 10 ** exp
+
+        
 
 class Encoder:
     a = 0
@@ -770,7 +733,7 @@ class Encoder:
     clockwise = False
     
     detent = False
-    detent_max = 2
+    detent_max = 4
     detent_count = 0
     
     enabled = False
@@ -848,6 +811,7 @@ class EncoderBank:
             e.update(to_send[2])
 
 
+Scope = Scope()
 EncoderBank0A = EncoderBank(0, GPIOA)
 EncoderBank0B = EncoderBank(0, GPIOB)
 EncoderBank1A = EncoderBank(1, GPIOA)

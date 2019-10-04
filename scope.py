@@ -18,6 +18,10 @@ from gpiozero import DigitalInputDevice
 from gpiozero import DigitalOutputDevice
 from gpiozero import PWMOutputDevice
 
+# for programming without the instrument connected
+SCOPELESS = True 
+
+DEBUG = False
 
 # Device register addresses
 IOCON_INITIAL = 0x0A
@@ -278,7 +282,6 @@ def cw_action_ch1_sc():
         Scope.ch1_scale_exp_b = num_to_ascii(Scope.ch1_scale_exp, True)
         
         cmd = b'CHAN1:SCAL ' + Scope.ch1_scale_base_b + b'E' + Scope.ch1_scale_exp_b + b'V\r\n'
-        #print(cmd)
         Sock.sendall(cmd)
         
     
@@ -304,7 +307,6 @@ def ccw_action_ch1_sc():
         Scope.ch1_scale_exp_b = num_to_ascii(Scope.ch1_scale_exp, True)
         
         cmd = b'CHAN1:SCAL ' + Scope.ch1_scale_base_b + b'E' + Scope.ch1_scale_exp_b + b'V\r\n'
-        #print(cmd)
         Sock.sendall(cmd)
 
 
@@ -355,21 +357,17 @@ def print_reply():
 
     
 def button_press(row, col):
-    lcd.cursor_pos = (0,0)
-    lcd.write_string("                   ")
-    lcd.cursor_pos = (0,0)
     if   (row & R1):
-        if   (col & C1):
-            lcd.write_string("Select")
-        elif (col & C2):
-            lcd.write_string("Back")
-        elif (col & C3):
-            lcd.write_string("Horizontal")
-        elif (col & C4):
-            lcd.write_string("Delay")
+        if   (col & C1): # select
+            pass
+        elif (col & C2): # back
+            pass
+        elif (col & C3): # horizontal
+            pass
+        elif (col & C4): # delay knob
+            pass
             
-        elif (col & C5):
-            lcd.write_string("Run/Stop")
+        elif (col & C5): # run/stop
             cmd = b':OPER:COND?\r\n'
             Sock.sendall(cmd)
             sleep(0.01)
@@ -393,88 +391,86 @@ def button_press(row, col):
                 cmd = b'RUN\r\n'
                 Sock.sendall(cmd)
             
-        elif (col & C6):
-            lcd.write_string("Single")
+        elif (col & C6): # single
             cmd = b':SINGLE\r\n'
             Sock.sendall(cmd)
             
     elif (row & R2):
-        if   (col & C1):
-            lcd.write_string("Horiz Scale")
-        elif (col & C2):
-            lcd.write_string("Zoom")
-            
-        elif (col & C3):
-            lcd.write_string("Default Setup")
+        if   (col & C1): # horizontal scale knob
+            pass
+        elif (col & C2): # zoom
+            pass
+        elif (col & C3): # default setup
             cmd = b'*CLS\r\n'
             Sock.sendall(cmd)
             cmd = b'*RST\r\n'
             Sock.sendall(cmd)
+            Scope.get_state()
             
-        elif (col & C4):
-            lcd.write_string("Auto Scale")
+        elif (col & C4): # autoscale
             cmd = b':AUTOSCALE\r\n'
             Sock.sendall(cmd)
+            sleep(0.01)
+            Scope.get_state()
             
-        elif (col & C5):
-            lcd.write_string("Math Scale")
-        elif (col & C6):
-            return # invalid input
+        elif (col & C5): # math scale knob
+            pass
+        elif (col & C6): # invalid input
+            pass 
     elif (row & R3):
-        if   (col & C1):
-            lcd.write_string("Trigger")
-        elif (col & C2):
-            lcd.write_string("Trig level")
-        elif (col & C3):
-            lcd.write_string("Measure")
-        elif (col & C4):
-            lcd.write_string("Cursors")
-        elif (col & C5):
-            lcd.write_string("Cursor ctl")
-        elif (col & C6):
-            lcd.write_string("Math")
+        if   (col & C1): # trigger 
+            pass
+        elif (col & C2): # trigger level knob
+            pass
+        elif (col & C3): # measure
+            pass
+        elif (col & C4): # cursors
+            pass
+        elif (col & C5): # cursors knob
+            pass
+        elif (col & C6): # math
+            pass
     elif (row & R4):
-        if   (col & C1):
-            lcd.write_string("Acquire")
-        elif (col & C2):
-            lcd.write_string("Display")
-        elif (col & C3):
-            lcd.write_string("Label")
-        elif (col & C4):
-            lcd.write_string("Save/Recall")
-        elif (col & C5):
-            lcd.write_string("Utility")
-        elif (col & C6):
-            lcd.write_string("Math offset")
+        if   (col & C1): # acquire
+            pass
+        elif (col & C2): # dsiplay
+            pass
+        elif (col & C3): # label
+            pass
+        elif (col & C4): # save/recall
+            pass
+        elif (col & C5): # utility
+            pass
+        elif (col & C6): # math offset knob
+            pass
     elif (row & R5):
-        if   (col & C1):
-            lcd.write_string("Ch1 Scale")
-        elif (col & C2):
-            lcd.write_string("Ch2 Scale")
-        elif (col & C3):
-            lcd.write_string("Ch3 Scale")
-        elif (col & C4):
-            lcd.write_string("Ch4 Scale")
-        elif (col & C5):
-            lcd.write_string("Ch3")
-        elif (col & C6):
-            lcd.write_string("Ch4")
+        if   (col & C1): # ch1 scale knob
+            pass
+        elif (col & C2): # ch2 scale knob
+            pass
+        elif (col & C3): # ch2 scale knob
+            pass
+        elif (col & C4): # ch4 scale knob
+            pass
+        elif (col & C5): # ch3
+            pass
+        elif (col & C6): # ch4
+            pass
     elif (row & R6):
-        if   (col & C1):
-            lcd.write_string("Ch1")
-        elif (col & C2):
-            lcd.write_string("Ch2")
-        elif (col & C3):
-            lcd.write_string("Ch1 offset")
+        if   (col & C1): # ch1
+            pass
+        elif (col & C2): # ch2
+            pass
+        elif (col & C3): #ch1 offset knob
             Scope.ch1_offset = 0
             cmd = b'CHAN1:OFFS +0E+0V\r\n'
             Sock.sendall(cmd)
-        elif (col & C4):
-            lcd.write_string("Ch2 offset")
-        elif (col & C5):
-            lcd.write_string("Ch3 offset")
-        elif (col & C6):
-            lcd.write_string("Ch4 offset")
+        elif (col & C4): # ch2 offset knob
+            pass
+        elif (col & C5): # ch3 offset knob
+            pass
+        elif (col & C6): # ch4 offset knob
+            pass
             
 
 # configure shutdown button
@@ -513,59 +509,70 @@ bklt_fault = DigitalInputDevice(2, pull_up=True)
 bklt_fault.when_activated = disable_backlight
 bklt_en.on()
 
-# Set up socket to scope
-remote_ip = "169.254.254.254"
-port = 5024
 
-#create an AF_INET, STREAM socket (TCP)
-Sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#NODELAY turns of Nagle improves chatty performance
-Sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 0)
+if (SCOPELESS):
+    class DummySocket:
+        def sendall(self, data):
+            return
+        def close(self):
+            return
+    Sock = DummySocket()
 
-if maxsize > 2**32:
-  time = struct.pack(str("ll"), int(1), int(0))
 else:
-  time = struct.pack(str("ii"), int(1), int(0))
-Sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, time)
+    # Set up socket to scope
+    remote_ip = "169.254.254.254"
+    port = 5024
 
-#Connect to remote server
-while True:
-    try:
-        print("Attempting to connect")
-        
-        lcd.clear()
-        lcd.write_string("Trying to connect...")
-        lcd.write_string("IP: " + remote_ip + '\r\n')
-        lcd.write_string("Port: " + str(port) + '\n')
-        
-        Sock.connect((remote_ip , port))
-        break
-    
-    except OSError:
-        print("Unable to connect, trying again in 30s")
-        
-        lcd.clear()
-        lcd.write_string("Unable to connect...\r\n")
-        lcd.write_string("Trying again in ")
-        
-        for i in range(1, 30):
-            lcd.cursor_pos = (1,16)
-            lcd.write_string(str(30-i) + "s ")
-            sleep(1)
-        
-print ('Socket Connected to ip ' + remote_ip)
+    #create an AF_INET, STREAM socket (TCP)
+    Sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #NODELAY turns of Nagle improves chatty performance
+    Sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 0)
 
-lcd.clear()
-lcd.write_string("Connected!")
-sleep(1)
+    if maxsize > 2**32:
+      time = struct.pack(str("ll"), int(1), int(0))
+    else:
+      time = struct.pack(str("ii"), int(1), int(0))
+    Sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, time)
 
-print_reply()
+    #Connect to remote server
+    while True:
+        try:
+            print("Attempting to connect")
+            
+            lcd.clear()
+            lcd.write_string("Trying to connect...")
+            lcd.write_string("IP: " + remote_ip + '\r\n')
+            lcd.write_string("Port: " + str(port) + '\n')
+            
+            Sock.connect((remote_ip , port))
+            break
+        
+        except OSError:
+            print("Unable to connect, trying again in 30s")
+            
+            lcd.clear()
+            lcd.write_string("Unable to connect...\r\n")
+            lcd.write_string("Trying again in ")
+            
+            for i in range(1, 30):
+                lcd.cursor_pos = (1,16)
+                lcd.write_string(str(30-i) + "s ")
+                sleep(1)
+            
+    print ('Socket Connected to ip ' + remote_ip)
+
+    lcd.clear()
+    lcd.write_string("Connected!")
+    sleep(1)
+
+    print_reply()
 
 
 def main():
     init_spi()
     init_encoders()
     lcd.clear()
+    print("initialized")
  
     try:
         events = 0
@@ -621,8 +628,8 @@ def main():
                     events += 1
             spi.close()
             
-            lcd.cursor_pos = (1,0)
-            lcd.write_string(str(events))
+            #lcd.cursor_pos = (1,0)
+            #lcd.write_string(str(events))
             
             
             if (interrupt5.value):
@@ -665,7 +672,7 @@ def main():
         Sock.close()
         disable_power()
         disable_backlight()
-        GPIO.cleanup()
+        #GPIO.cleanup()
         exit()
         
 
@@ -673,55 +680,56 @@ class Scope:
     # ch1
     ch1_enabled = False
     ch1_probe_aten = 0
-    ch1_scale_base_b = 0
-    ch1_scale_base = 0
-    ch1_scale_exp_b = 0
+    ch1_scale_base_b = b'+5'
+    ch1_scale_base = 5
+    ch1_scale_exp_b = b'+0'
     ch1_scale_exp = 0
-    ch1_scale = 0
+    ch1_scale = 5
     ch1_offset = 0
-    ch1_offset_b = 0
+    ch1_offset_b = b'+0e+0'
     
     def __init__(self):
         self.get_state()
     
     def get_state(self):
-        cmd = b'CHAN1:SCAL?\r\n'
-        Sock.sendall(cmd)
-        sleep(0.1)
-        
-        reply = get_reply()
-        reply = reply[::-1]
-        reply = reply[4:]
-        start = reply.index(b'\n')
-        reply = reply[:start]
-        reply = reply[::-1]
-        
-        num_end = reply.index(b'E')
-        self.ch1_scale_base_b = reply[:num_end]
-        self.ch1_scale_exp_b = reply[num_end+1:]
-        
-        self.ch1_scale_base = ascii_to_num(self.ch1_scale_base_b)
-        self.ch1_scale_exp = ascii_to_num(self.ch1_scale_exp_b)
-        
-        self.ch1_scale = self.ch1_scale_base * 10 ** self.ch1_scale_exp
-        
-        cmd = b'CHAN1:OFFS?\r\n'
-        Sock.sendall(cmd)
-        sleep(0.1)
-        reply = get_reply()
-        reply = reply[::-1]
-        reply = reply[4:]
-        start = reply.index(b'\n')
-        reply = reply[:start]
-        reply = reply[::-1]
-        
-        base_end = reply.index(b'E')
-        base = reply[:base_end]
-        exp = reply[num_end+1:]
-        base = ascii_to_num(base)
-        exp = ascii_to_num(exp)
-        
-        Scope.ch1_offset = base * 10 ** exp
+        if (not SCOPELESS):
+            cmd = b'CHAN1:SCAL?\r\n'
+            Sock.sendall(cmd)
+            sleep(0.1)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            num_end = reply.index(b'E')
+            self.ch1_scale_base_b = reply[:num_end]
+            self.ch1_scale_exp_b = reply[num_end+1:]
+            
+            self.ch1_scale_base = ascii_to_num(self.ch1_scale_base_b)
+            self.ch1_scale_exp = ascii_to_num(self.ch1_scale_exp_b)
+            
+            self.ch1_scale = self.ch1_scale_base * 10 ** self.ch1_scale_exp
+            
+            cmd = b'CHAN1:OFFS?\r\n'
+            Sock.sendall(cmd)
+            sleep(0.1)
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            base_end = reply.index(b'E')
+            base = reply[:base_end]
+            exp = reply[num_end+1:]
+            base = ascii_to_num(base)
+            exp = ascii_to_num(exp)
+            
+            Scope.ch1_offset = base * 10 ** exp
 
         
 

@@ -21,7 +21,12 @@ from gpiozero import PWMOutputDevice
 # for programming without the instrument connected
 SCOPELESS = True 
 
-DEBUG = False
+# LCD Characters
+CURSOR = 0x7F
+UP_ARROW = 0x00
+DOWN_ARROW = 0x01
+BLANK = 0x10
+OMEGA = 0xF4
 
 # Device register addresses
 IOCON_INITIAL = 0x0A
@@ -326,26 +331,66 @@ def cw_ch1_offset():
     
 def init_encoders():
     # Bank 0A
-    ch1_scale = Encoder(A_CH1_SC, B_CH1_SC)
-    ch1_scale.enabled = True
-    ch1_scale.detent = True
-    ch1_scale.cw_action = cw_action_ch1_sc
-    ch1_scale.ccw_action = ccw_action_ch1_sc
+    Ch1Scale = Encoder(A_CH1_SC, B_CH1_SC)
+    Ch1Scale.enabled = True
+    Ch1Scale.detent = True
+    Ch1Scale.cw_action = cw_action_ch1_sc
+    Ch1Scale.ccw_action = ccw_action_ch1_sc
+    
+    Ch1Offset = Encoder(A_CH1_OS, B_CH1_OS)
+    Ch1Offset.enabled = True
+    Ch1Offset.cw_action = cw_ch1_offset
+    Ch1Offset.ccw_action = ccw_ch1_offset
 
-    ch2_scale = Encoder(A_CH2_SC, B_CH2_SC)
-    ch2_scale.detent = True
+    Ch2Scale = Encoder(A_CH2_SC, B_CH2_SC)
+    Ch2Scale.detent = True
     
-    ch1_offset = Encoder(A_CH1_OS, B_CH1_OS)
-    ch1_offset.enabled = True
-    ch1_scale.detent = True
-    ch1_offset.cw_action = cw_ch1_offset
-    ch1_offset.ccw_action = ccw_ch1_offset
+    Ch2Offset = Encoder(A_CH2_OS, B_CH2_OS)
     
-    ch2_offset = Encoder (A_CH2_OS, B_CH2_OS)
-    
-    bank0A = [ch1_scale, ch2_scale, ch1_offset, ch2_offset]
-    
+    bank0A = [Ch1Scale, Ch1Offset,  Ch2Scale, Ch2Offset]
     EncoderBank0A.encoders = bank0A
+    
+    # Bank 0B
+    Ch3Scale = Encoder(A_CH3_SC, B_CH3_SC)
+    Ch3Scale.detent = True
+    
+    Ch3Offset = Encoder(A_CH3_OS, B_CH3_OS)
+    
+    Ch4Scale = Encoder(A_CH4_SC, B_CH4_SC)
+    Ch4Scale.detent = True
+    
+    Ch4Offset = Encoder(A_CH4_OS, B_CH4_OS)
+    
+    bank0B = [Ch3Scale, Ch3Offset, Ch4Scale, Ch4Offset]
+    EncoderBank0B.encoders = bank0B
+    
+    # Bank 1A
+    Timebase = Encoder(A_HORIZ, B_HORIZ)
+    Timebase.detent = True
+    
+    Delay = Encoder(A_DELAY, B_DELAY)
+    
+    Select = Encoder(A_SEL, B_SEL)
+    Select.enabled = True
+    Select.sensitivity = 4
+    Select.cw_action = Menu.increment_cursor
+    Select.ccw_action = Menu.decrement_cursor
+    
+    bank1A = [Timebase, Delay, Select]
+    EncoderBank1A.encoders = bank1A
+    
+    # Bank 1B
+    MathScale = Encoder(A_MATH_SC, B_MATH_SC)
+    MathScale.detent = True
+    
+    MathOffset = Encoder(A_MATH_OS, B_MATH_OS)
+    
+    Cursor = Encoder(A_CURS, B_CURS)
+    
+    Trigger = Encoder(A_TRIG, B_TRIG)
+    
+    bank1B = [MathScale, MathOffset, Cursor, Trigger]
+    EncoderBank1B.encoders = bank1B
     
 
 def get_reply():
@@ -502,9 +547,35 @@ interrupt6 = DigitalInputDevice(21)
 lcd = CharLCD(
     pin_rs=25, pin_rw=24, pin_e=22, pins_data=[23, 27, 17, 18],
     cols=20, rows=4,
-    numbering_mode=GPIO.BCM)
-bklt_en = PWMOutputDevice(4)
+    numbering_mode=GPIO.BCM,
+    auto_linebreaks = False,
+    charmap = 'A02')
 
+up_arrow = (
+	0b00000,
+	0b00000,
+	0b00100,
+	0b00100,
+	0b01110,
+	0b01110,
+	0b11111,
+	0b00000
+)
+lcd.create_char(0, up_arrow)
+
+down_arrow = (
+    0b00000,
+	0b00000,
+	0b11111,
+	0b01110,
+	0b01110,
+	0b00100,
+	0b00100,
+	0b00000
+)
+lcd.create_char(1, down_arrow)
+    
+bklt_en = PWMOutputDevice(4)
 bklt_fault = DigitalInputDevice(2, pull_up=True)
 bklt_fault.when_activated = disable_backlight
 bklt_en.on()
@@ -517,7 +588,6 @@ if (SCOPELESS):
         def close(self):
             return
     Sock = DummySocket()
-
 else:
     # Set up socket to scope
     remote_ip = "169.254.254.254"
@@ -573,9 +643,13 @@ def main():
     init_encoders()
     lcd.clear()
     print("initialized")
+    
+    Menu.enable()
+    Menu.display_menu()
+    
  
     try:
-        events = 0
+        #events = 0
         c = 0
         
         while True:
@@ -625,47 +699,21 @@ def main():
                     cs2.off()
                     
                     button_press(button_io[0], ~drive_col)
-                    events += 1
+                    
             spi.close()
-            
-            #lcd.cursor_pos = (1,0)
-            #lcd.write_string(str(events))
-            
             
             if (interrupt5.value):
                 EncoderBank0A.update_encoders()
-            """
-            if (interrupt5.value):
-                to_send = [SPI_READ, GPIOA, 0x00]
-                spi.xfer2(to_send)
-                lcd.cursor_pos = (2,0)
-                lcd.write_string(format(to_send[2], '08b'))
             
             if (interrupt6.value):
-                to_send = [SPI_READ, GPIOB, 0x00]
-                spi.xfer2(to_send)            
-                lcd.cursor_pos = (3,0)
-                lcd.write_string(format(to_send[2], '08b'))
-            
-            spi.close()
-            spi.open(0,1)
-            spi.mode = SPI_MODE
-            spi.max_speed_hz = SPI_RATE
-            
+                EncoderBank0B.update_encoders()
+                
             if (interrupt1.value):
-                to_send = [SPI_READ, GPIOA, 0x00]
-                spi.xfer2(to_send)
-                lcd.cursor_pos = (2,10)
-                lcd.write_string(format(to_send[2], '08b'))
-            
+                EncoderBank1A.update_encoders()
+                
             if (interrupt2.value):
-                to_send = [SPI_READ, GPIOB, 0x00]
-                spi.xfer2(to_send)            
-                lcd.cursor_pos = (3,10)
-                lcd.write_string(format(to_send[2], '08b'))
+                EncoderBank1B.update_encoders()
             
-            spi.close()
-            """
         
     except Exception as e:
         print(e)
@@ -737,8 +785,11 @@ class Encoder:
     a = 0
     b = 0
     ppr = 24
-    count = 0
+    raw_count = 0
     clockwise = False
+    
+    sensitivity = 1
+    count = 0
     
     detent = False
     detent_max = 4
@@ -754,27 +805,35 @@ class Encoder:
         if self.detent:
             if ((self.detent_count >= self.detent_max) != (self.detent_count <= -1 * self.detent_max)):
                 self.detent_count = 0
-                self.detent = False
-                self.action()
-                self.detent = True
+                if (self.clockwise):
+                    self.cw_action()
+                else:
+                    self.ccw_action()
         else: 
-            if (self.clockwise):
-                self.cw_action()
-            else:
-                self.ccw_action()
+            if ((self.count >= self.sensitivity) != (self.count <= -1 * self.sensitivity)):
+                self.count = 0
+                if (self.clockwise):
+                    self.cw_action()
+                else:
+                    self.ccw_action()
         
     def adjust_count(self):
-        if (self.count == 0 and not self.clockwise):
-            self.count = self.ppr - 1
-        elif (self.count == self.ppr - 1 and self.clockwise):
-            self.count = 0
+        if (self.raw_count == 0 and not self.clockwise):
+            self.raw_count = self.ppr - 1
+        elif (self.raw_count == self.ppr - 1 and self.clockwise):
+            self.raw_count = 0
         else :
-            self.count += 1 if self.clockwise else -1
+            self.raw_count += 1 if self.clockwise else -1
             
         if (self.detent_count < self.detent_max and self.clockwise):
             self.detent_count += 1
         elif (self.detent_count > -1 * self.detent_max and not self.clockwise):
             self.detent_count += -1
+        
+        if (self.count < self.sensitivity and self.clockwise):
+            self.count += 1
+        elif (self.count > -1 * self.sensitivity and not self.clockwise):
+            self.count += -1
             
     
     def update(self, byte):
@@ -825,6 +884,93 @@ EncoderBank0B = EncoderBank(0, GPIOB)
 EncoderBank1A = EncoderBank(1, GPIOA)
 EncoderBank1B = EncoderBank(1, GPIOB)
 
+
+class MenuItem:
+    text = ""
+    
+    def __init__(self, text):
+        self.text = text
+        
+class Menu:
+    menu_items = []
+    is_active = False
+    cursor = 0
+    start_index = 0
+    max_index = -1
+    
+    def __init__(self):
+        return
+    
+    def set_menu(self, menu_items):
+        self.menu_items = menu_items
+        self.max_index = len(self.menu_items) - 1
+        
+    def enable(self):
+        if(self.max_index >= 0):
+            self.start_index = 0
+            self.cursor = 0
+            self.is_active = True
+        
+    def disable(self):
+        if(self.is_active):
+            self.is_active = False
+            lcd.clear()
+        
+    def display_menu(self):
+        if (self.is_active and self.max_index >= 0):
+            lcd.clear()
+            for i in range(self.start_index, self.start_index + 4):
+                if (i <= self.max_index):
+                    lcd.write_string(str(i + 1) + ".")
+                    lcd.write_string(self.menu_items[i].text)
+                    lcd.crlf()
+                    
+            if (self.start_index > 0):
+                lcd.cursor_pos = (0,19)
+                lcd.write(UP_ARROW)
+                
+            if (self.start_index + 3 < self.max_index):
+                lcd.cursor_pos = (3,19)
+                lcd.write(DOWN_ARROW)
+            
+            self.display_cursor()
+                    
+    def display_cursor(self):
+        if (self.is_active and self.max_index >= 0):
+            lcd.cursor_pos = (self.cursor - self.start_index, 18)
+            lcd.write(CURSOR)
+            
+    def increment_cursor(self):
+        if (self.is_active and self.cursor < self.max_index):
+            self.cursor += 1
+            if (self.start_index < self.cursor - 3):
+                self.start_index += 1
+                self.display_menu()
+            else:
+                lcd.cursor_pos = (self.cursor - 1 - self.start_index, 18)
+                lcd.write(BLANK)
+                self.display_cursor()
+        
+    def decrement_cursor(self):
+        if (self.is_active and self.cursor > 0):
+            self.cursor -= 1
+            if (self.start_index > self.cursor):
+                self.start_index = self.cursor
+                self.display_menu()
+            else:
+                lcd.cursor_pos = (self.cursor + 1 - self.start_index, 18)
+                lcd.write(BLANK)
+                self.display_cursor()
+
+Menu = Menu()
+
+ChCoupling = MenuItem("Coupling")
+ChImpedance = MenuItem("Input Z")
+ChBWLimit = MenuItem("BW Limit")
+ChInvert = MenuItem("Invert")
+ChProbeSettings = MenuItem("Probe settings")
+ChannelMenu = [ChCoupling, ChImpedance, ChBWLimit, ChInvert, ChProbeSettings]
+Menu.set_menu(ChannelMenu)
 
 if __name__ == "__main__":
     main()

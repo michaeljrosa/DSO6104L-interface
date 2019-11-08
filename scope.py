@@ -19,7 +19,7 @@ from gpiozero import DigitalOutputDevice
 from gpiozero import PWMOutputDevice
 
 # for programming without the instrument connected
-SCOPELESS = True 
+SCOPELESS = False 
 
 # LCD Characters
 CURSOR = 0x7F
@@ -27,6 +27,7 @@ UP_ARROW = 0x00
 DOWN_ARROW = 0x01
 BLANK = 0x10
 OMEGA = 0xF4
+ACTIVE = 0x2A
 
 # Device register addresses
 IOCON_INITIAL = 0x0A
@@ -60,6 +61,8 @@ SPI_MODE = 0b00
 SPI_RATE = 10000000   # hertz
 
 DEBOUNCE = 0.035  # seconds
+CMD_WAIT = 0.01
+AUTOSCALE_WAIT = 1
 
 # SPI device 2, port A
 C1 = 1<<5
@@ -265,6 +268,11 @@ def num_to_ascii(num, is_integer):
     else:
         return sign + str(num).encode()
     
+    
+def update_select_funcs():
+    EncoderBank1A.encoders[2].cw_action = ActiveMenu.increment_cursor
+    EncoderBank1A.encoders[2].ccw_action = ActiveMenu.decrement_cursor
+    
 def cw_action_ch1_sc():
     # deal with probe attenuation factor here
     # fine adjustment?
@@ -288,7 +296,6 @@ def cw_action_ch1_sc():
         
         cmd = b'CHAN1:SCAL ' + Scope.ch1_scale_base_b + b'E' + Scope.ch1_scale_exp_b + b'V\r\n'
         Sock.sendall(cmd)
-        
     
 def ccw_action_ch1_sc():
     # deal with probe attenuation factor here
@@ -314,7 +321,6 @@ def ccw_action_ch1_sc():
         cmd = b'CHAN1:SCAL ' + Scope.ch1_scale_base_b + b'E' + Scope.ch1_scale_exp_b + b'V\r\n'
         Sock.sendall(cmd)
 
-
 def ccw_ch1_offset():
     step = 0.125 * Scope.ch1_scale
     Scope.ch1_offset += step
@@ -328,6 +334,17 @@ def cw_ch1_offset():
     
     cmd = b'CHAN1:OFFS ' + "{:.6E}".format(Scope.ch1_offset).encode() + b'V\r\n'
     Sock.sendall(cmd)
+    
+def set_ch1_ac_coupling():
+    cmd = b'CHAN1:COUP AC\r\n'
+    Sock.sendall(cmd)
+    Scope.ch1_ac_coupling.value = True
+    
+def set_ch1_dc_coupling():
+    cmd = b'CHAN1:COUP DC\r\n'
+    Sock.sendall(cmd)
+    Scope.ch1_ac_coupling.value = False
+    
     
 def init_encoders():
     # Bank 0A
@@ -373,8 +390,8 @@ def init_encoders():
     Select = Encoder(A_SEL, B_SEL)
     Select.enabled = True
     Select.sensitivity = 4
-    Select.cw_action = Menu.increment_cursor
-    Select.ccw_action = Menu.decrement_cursor
+    Select.cw_action = ActiveMenu.increment_cursor
+    Select.ccw_action = ActiveMenu.decrement_cursor
     
     bank1A = [Timebase, Delay, Select]
     EncoderBank1A.encoders = bank1A
@@ -391,7 +408,22 @@ def init_encoders():
     
     bank1B = [MathScale, MathOffset, Cursor, Trigger]
     EncoderBank1B.encoders = bank1B
+   
+def init_menus():
+    ChCoupling = ToggleMenu("Coupling")
+    ACCoupling = MenuItem("AC")
+    ACCoupling.select = set_ch1_ac_coupling
+    DCCoupling = MenuItem("DC")
+    DCCoupling.select = set_ch1_dc_coupling
+    ChCoupling.set_options(ACCoupling, DCCoupling, Scope.ch1_ac_coupling)
     
+    ChImpedance = MenuItem("Input Z")
+    ChBWLimit = MenuItem("BW Limit")
+    ChInvert = MenuItem("Invert")
+    ChProbeSettings = MenuItem("Probe settings")
+    ChannelMenuItems = [ChCoupling, ChImpedance, ChBWLimit, ChInvert, ChProbeSettings]
+    ChannelMenu.set_menu(ChannelMenuItems)
+    ChannelMenu.container = BlankMenu()
 
 def get_reply():
     reply = Sock.recv(4096)
@@ -404,9 +436,9 @@ def print_reply():
 def button_press(row, col):
     if   (row & R1):
         if   (col & C1): # select
-            pass
+            ActiveMenu.select()
         elif (col & C2): # back
-            pass
+            ActiveMenu.back()
         elif (col & C3): # horizontal
             pass
         elif (col & C4): # delay knob
@@ -415,9 +447,8 @@ def button_press(row, col):
         elif (col & C5): # run/stop
             cmd = b':OPER:COND?\r\n'
             Sock.sendall(cmd)
-            sleep(0.01)
+            sleep(CMD_WAIT)
             reply = get_reply()
-            print(reply)
             reply = reply[::-1]
             
             oscr = 0
@@ -450,16 +481,19 @@ def button_press(row, col):
             Sock.sendall(cmd)
             cmd = b'*RST\r\n'
             Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            get_reply()
             Scope.get_state()
             
         elif (col & C4): # autoscale
             cmd = b':AUTOSCALE\r\n'
             Sock.sendall(cmd)
-            sleep(0.01)
+            sleep(AUTOSCALE_WAIT)
+            get_reply()
             Scope.get_state()
             
         elif (col & C5): # math scale knob
-            pass
+            passcmd = b'CHAN1:OFFS +0E+0V\r\n'
         elif (col & C6): # invalid input
             pass 
     elif (row & R3):
@@ -626,7 +660,7 @@ else:
             
             for i in range(1, 30):
                 lcd.cursor_pos = (1,16)
-                lcd.write_string(str(30-i) + "s ")
+                lcd.write_string(str(30-i) + "s")
                 sleep(1)
             
     print ('Socket Connected to ip ' + remote_ip)
@@ -639,13 +673,20 @@ else:
 
 
 def main():
+    Scope.get_state()
     init_spi()
     init_encoders()
+    init_menus()
     lcd.clear()
     print("initialized")
     
-    Menu.enable()
-    Menu.display_menu()
+    global ActiveMenu 
+    ActiveMenu = ChannelMenu
+    
+    update_select_funcs()
+    
+    ActiveMenu.enable()
+    ActiveMenu.display_menu()
     
  
     try:
@@ -723,10 +764,12 @@ def main():
         #GPIO.cleanup()
         exit()
         
+class ToggleSetting:
+    def __init__(self, bool_value):
+        self.value = bool_value
 
 class Scope:
     # ch1
-    ch1_enabled = False
     ch1_probe_aten = 0
     ch1_scale_base_b = b'+5'
     ch1_scale_base = 5
@@ -734,16 +777,36 @@ class Scope:
     ch1_scale_exp = 0
     ch1_scale = 5
     ch1_offset = 0
-    ch1_offset_b = b'+0e+0'
+    ch1_offset_b = b'+0E+0'
+    
+    ch1_enabled = ToggleSetting(False)
+    ch1_ac_coupling = ToggleSetting(False)
     
     def __init__(self):
         self.get_state()
     
     def get_state(self):
         if (not SCOPELESS):
+            cmd = b'CHAN1:DISP?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            if (reply[0:1] == b'0'):
+                self.ch1_enabled.value = False
+            elif (reply[0:1] == b'1'):
+                self.ch1_enabled.value = True
+            
+            
             cmd = b'CHAN1:SCAL?\r\n'
             Sock.sendall(cmd)
-            sleep(0.1)
+            sleep(CMD_WAIT)
             
             reply = get_reply()
             reply = reply[::-1]
@@ -761,15 +824,18 @@ class Scope:
             
             self.ch1_scale = self.ch1_scale_base * 10 ** self.ch1_scale_exp
             
+            
             cmd = b'CHAN1:OFFS?\r\n'
             Sock.sendall(cmd)
-            sleep(0.1)
+            sleep(CMD_WAIT)
+            
             reply = get_reply()
             reply = reply[::-1]
             reply = reply[4:]
             start = reply.index(b'\n')
             reply = reply[:start]
             reply = reply[::-1]
+            self.ch1_offset_b = reply
             
             base_end = reply.index(b'E')
             base = reply[:base_end]
@@ -777,9 +843,27 @@ class Scope:
             base = ascii_to_num(base)
             exp = ascii_to_num(exp)
             
-            Scope.ch1_offset = base * 10 ** exp
+            self.ch1_offset = base * 10 ** exp
+            
+            
+            cmd = b'CHAN1:COUP?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            if (reply[0:1] == b'D'):
+                self.ch1_ac_coupling.value = False
+            elif (reply[0:1] == b'A'):
+                self.ch1_ac_coupling.value = True
+      
 
-        
+    
 
 class Encoder:
     a = 0
@@ -891,19 +975,153 @@ class MenuItem:
     def __init__(self, text):
         self.text = text
         
+    def select(self):
+        return
+        
+        
 class Menu:
-    menu_items = []
     is_active = False
+    
+    def enable(self):
+        raise NotImplementedError
+    
+    def disable(self):
+        raise NotImplementedError
+    
+    def display_menu(self):
+        raise NotImplementedError
+    
+    def display_cursor(self):
+        raise NotImplementedError
+            
+    def increment_cursor(self):
+        raise NotImplementedError
+        
+    def decrement_cursor(self):
+        raise NotImplementedError
+        
+    def select(self):
+        raise NotImplementedError
+        
+    def back(self):
+        raise NotImplementedError
+
+
+class BlankMenu(Menu):
+    def enable(self):
+        return
+    
+    def disable(self):
+        return
+    
+    def display_menu(self):
+        lcd.clear()
+    
+    def display_cursor(self):
+        return
+            
+    def increment_cursor(self):
+        return
+        
+    def decrement_cursor(self):
+        return
+        
+    def select(self):
+        return
+        
+    def back(self):
+        return
+        
+        
+class ToggleMenu(Menu):
+    text = ""
+    options_set = False
+    
+    def __init__(self, text):
+        super().__init__()
+        self.text = text
+        
+    def set_options(self, option1, option2, setting):
+        self.option1 = option1
+        self.option2 = option2
+        self.setting = setting
+        self.options_set = True
+        
+    def enable(self):
+        if (self.options_set):
+            self.is_active = True
+            
+    def disable(self):
+        if (self.is_active):
+            self.is_active = False
+            lcd.clear()
+            
+    def display_menu(self):
+        if (self.is_active and self.options_set):
+            lcd.clear()
+            lcd.write_string(self.text)
+            lcd.cursor_pos = (1,2)
+            lcd.write_string(self.option1.text)
+            lcd.cursor_pos = (2,2)
+            lcd.write_string(self.option2.text)
+            
+            if (self.setting.value):
+                lcd.cursor_pos = (1,1)
+                lcd.write(ACTIVE)
+            else:
+                lcd.cursor_pos = (2,1)
+                lcd.write(ACTIVE)
+            
+        
+    def display_cursor(self):
+        return
+        
+    def increment_cursor(self):
+        return
+        
+    def decrement_cursor(self):
+        return
+            
+    def select(self):
+        if (not self.is_active):
+            self.container.disable()
+            global ActiveMenu 
+            ActiveMenu = self
+            update_select_funcs()
+            self.enable()
+            self.display_menu()
+        else:
+            if (not self.setting.value):
+                self.option1.select()
+            else:
+                self.option2.select()
+            self.display_menu()
+    
+    def back(self):
+        if (self.is_active):
+            self.disable()
+            global ActiveMenu 
+            ActiveMenu = self.container
+            update_select_funcs()
+            self.container.enable()
+            self.container.display_menu()
+        
+        
+class ListMenu(Menu):
+    menu_items = []
     cursor = 0
     start_index = 0
     max_index = -1
     
     def __init__(self):
-        return
+        super().__init__()
     
     def set_menu(self, menu_items):
         self.menu_items = menu_items
         self.max_index = len(self.menu_items) - 1
+        
+        for x in menu_items:
+            x.container = self
         
     def enable(self):
         if(self.max_index >= 0):
@@ -961,16 +1179,32 @@ class Menu:
                 lcd.cursor_pos = (self.cursor + 1 - self.start_index, 18)
                 lcd.write(BLANK)
                 self.display_cursor()
+                
+    def select(self):
+        if (not self.is_active):
+            self.container.disable()
+            global ActiveMenu
+            ActiveMenu = self
+            update_select_funcs()
+            self.enable()
+            self.display_menu()
+        else:
+            self.menu_items[self.cursor].select()
+            self.display_menu()
+        
+    def back(self):
+        if (self.is_active):
+            self.disable()
+            global ActiveMenu 
+            ActiveMenu = self.container
+            update_select_funcs()
+            self.container.enable()
+            self.container.display_menu()
 
-Menu = Menu()
 
-ChCoupling = MenuItem("Coupling")
-ChImpedance = MenuItem("Input Z")
-ChBWLimit = MenuItem("BW Limit")
-ChInvert = MenuItem("Invert")
-ChProbeSettings = MenuItem("Probe settings")
-ChannelMenu = [ChCoupling, ChImpedance, ChBWLimit, ChInvert, ChProbeSettings]
-Menu.set_menu(ChannelMenu)
+
+ChannelMenu = ListMenu()
+ActiveMenu = BlankMenu()
 
 if __name__ == "__main__":
     main()

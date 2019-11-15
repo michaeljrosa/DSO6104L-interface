@@ -270,99 +270,34 @@ def num_to_ascii(num, is_integer):
     
     
 def update_select_funcs():
+    global ActiveMenu
     EncoderBank1A.encoders[2].cw_action = ActiveMenu.increment_cursor
     EncoderBank1A.encoders[2].ccw_action = ActiveMenu.decrement_cursor
-    
-def cw_action_ch1_sc():
-    # deal with probe attenuation factor here
-    # fine adjustment?
-    
-    if (Scope.ch1_scale < 5):
-        if (Scope.ch1_scale_base_b[1:2] == b'1'):
-            Scope.ch1_scale_base = Scope.ch1_scale_base * 2
-            Scope.ch1_offset = Scope.ch1_offset * 2
-        elif (Scope.ch1_scale_base_b[1:2] == b'2'):
-            Scope.ch1_scale_base = Scope.ch1_scale_base * 2.5
-            Scope.ch1_offset = Scope.ch1_offset * 2.5
-        elif (Scope.ch1_scale_base_b[1:2] == b'5'):
-            Scope.ch1_scale_base = Scope.ch1_scale_base * 2 / 10
-            Scope.ch1_offset = Scope.ch1_offset * 2 / 10
-            Scope.ch1_scale_exp += 1
-            
-        #update state
-        Scope.ch1_scale = Scope.ch1_scale_base * 10 ** Scope.ch1_scale_exp
-        Scope.ch1_scale_base_b = num_to_ascii(Scope.ch1_scale_base, False)
-        Scope.ch1_scale_exp_b = num_to_ascii(Scope.ch1_scale_exp, True)
-        
-        cmd = b'CHAN1:SCAL ' + Scope.ch1_scale_base_b + b'E' + Scope.ch1_scale_exp_b + b'V\r\n'
-        Sock.sendall(cmd)
-    
-def ccw_action_ch1_sc():
-    # deal with probe attenuation factor here
-    # fine adjustment?
-    
-    if (Scope.ch1_scale > 0.002):
-        if (Scope.ch1_scale_base_b[1:2] == b'1'):
-            Scope.ch1_scale_base = Scope.ch1_scale_base / 2 * 10
-            Scope.ch1_offset = Scope.ch1_offset * 2 / 10
-            Scope.ch1_scale_exp -= 1
-        elif (Scope.ch1_scale_base_b[1:2] == b'2'):
-            Scope.ch1_scale_base = Scope.ch1_scale_base / 2
-            Scope.ch1_offset = Scope.ch1_offset / 2
-        elif (Scope.ch1_scale_base_b[1:2] == b'5'):
-            Scope.ch1_scale_base = Scope.ch1_scale_base * 2 / 5
-            Scope.ch1_offset = Scope.ch1_offset * 2 / 5
-        
-        #update state
-        Scope.ch1_scale = Scope.ch1_scale_base * 10 ** Scope.ch1_scale_exp
-        Scope.ch1_scale_base_b = num_to_ascii(Scope.ch1_scale_base, False)
-        Scope.ch1_scale_exp_b = num_to_ascii(Scope.ch1_scale_exp, True)
-        
-        cmd = b'CHAN1:SCAL ' + Scope.ch1_scale_base_b + b'E' + Scope.ch1_scale_exp_b + b'V\r\n'
-        Sock.sendall(cmd)
-
-def ccw_ch1_offset():
-    step = 0.125 * Scope.ch1_scale
-    Scope.ch1_offset += step
-    
-    cmd = b'CHAN1:OFFS ' + "{:.6E}".format(Scope.ch1_offset).encode() + b'V\r\n'
-    Sock.sendall(cmd)
-    
-def cw_ch1_offset():
-    step = 0.125 * Scope.ch1_scale
-    Scope.ch1_offset -= step
-    
-    cmd = b'CHAN1:OFFS ' + "{:.6E}".format(Scope.ch1_offset).encode() + b'V\r\n'
-    Sock.sendall(cmd)
-    
-def set_ch1_ac_coupling():
-    cmd = b'CHAN1:COUP AC\r\n'
-    Sock.sendall(cmd)
-    Scope.ch1_ac_coupling.value = True
-    
-def set_ch1_dc_coupling():
-    cmd = b'CHAN1:COUP DC\r\n'
-    Sock.sendall(cmd)
-    Scope.ch1_ac_coupling.value = False
     
     
 def init_encoders():
     # Bank 0A
     Ch1Scale = Encoder(A_CH1_SC, B_CH1_SC)
-    Ch1Scale.enabled = True
     Ch1Scale.detent = True
-    Ch1Scale.cw_action = cw_action_ch1_sc
-    Ch1Scale.ccw_action = ccw_action_ch1_sc
+    Ch1Scale.enabled = True
+    Ch1Scale.cw_action = Scope.Channel1.cw_scale
+    Ch1Scale.ccw_action = Scope.Channel1.ccw_scale
     
     Ch1Offset = Encoder(A_CH1_OS, B_CH1_OS)
     Ch1Offset.enabled = True
-    Ch1Offset.cw_action = cw_ch1_offset
-    Ch1Offset.ccw_action = ccw_ch1_offset
+    Ch1Offset.cw_action = Scope.Channel1.cw_offset
+    Ch1Offset.ccw_action = Scope.Channel1.ccw_offset
 
     Ch2Scale = Encoder(A_CH2_SC, B_CH2_SC)
     Ch2Scale.detent = True
+    Ch2Scale.enabled = True
+    Ch2Scale.cw_action = Scope.Channel2.cw_scale
+    Ch2Scale.ccw_action = Scope.Channel2.ccw_scale
     
     Ch2Offset = Encoder(A_CH2_OS, B_CH2_OS)
+    Ch2Offset.enabled = True
+    Ch2Offset.cw_action = Scope.Channel2.cw_offset
+    Ch2Offset.ccw_action = Scope.Channel2.ccw_offset
     
     bank0A = [Ch1Scale, Ch1Offset,  Ch2Scale, Ch2Offset]
     EncoderBank0A.encoders = bank0A
@@ -370,13 +305,25 @@ def init_encoders():
     # Bank 0B
     Ch3Scale = Encoder(A_CH3_SC, B_CH3_SC)
     Ch3Scale.detent = True
+    Ch3Scale.enabled = True
+    Ch3Scale.cw_action = Scope.Channel3.cw_scale
+    Ch3Scale.ccw_action = Scope.Channel3.ccw_scale
     
     Ch3Offset = Encoder(A_CH3_OS, B_CH3_OS)
+    Ch3Offset.enabled = True
+    Ch3Offset.cw_action = Scope.Channel3.cw_offset
+    Ch3Offset.ccw_action = Scope.Channel3.ccw_offset
     
     Ch4Scale = Encoder(A_CH4_SC, B_CH4_SC)
     Ch4Scale.detent = True
+    Ch4Scale.enabled = True
+    Ch4Scale.cw_action = Scope.Channel4.cw_scale
+    Ch4Scale.ccw_action = Scope.Channel4.ccw_scale
     
     Ch4Offset = Encoder(A_CH4_OS, B_CH4_OS)
+    Ch4Offset.enabled = True
+    Ch4Offset.cw_action = Scope.Channel4.cw_offset
+    Ch4Offset.ccw_action = Scope.Channel4.ccw_offset
     
     bank0B = [Ch3Scale, Ch3Offset, Ch4Scale, Ch4Offset]
     EncoderBank0B.encoders = bank0B
@@ -408,22 +355,7 @@ def init_encoders():
     
     bank1B = [MathScale, MathOffset, Cursor, Trigger]
     EncoderBank1B.encoders = bank1B
-   
-def init_menus():
-    ChCoupling = ToggleMenu("Coupling")
-    ACCoupling = MenuItem("AC")
-    ACCoupling.select = set_ch1_ac_coupling
-    DCCoupling = MenuItem("DC")
-    DCCoupling.select = set_ch1_dc_coupling
-    ChCoupling.set_options(ACCoupling, DCCoupling, Scope.ch1_ac_coupling)
     
-    ChImpedance = MenuItem("Input Z")
-    ChBWLimit = MenuItem("BW Limit")
-    ChInvert = MenuItem("Invert")
-    ChProbeSettings = MenuItem("Probe settings")
-    ChannelMenuItems = [ChCoupling, ChImpedance, ChBWLimit, ChInvert, ChProbeSettings]
-    ChannelMenu.set_menu(ChannelMenuItems)
-    ChannelMenu.container = BlankMenu()
 
 def get_reply():
     reply = Sock.recv(4096)
@@ -434,6 +366,7 @@ def print_reply():
 
     
 def button_press(row, col):
+    global ActiveMenu
     if   (row & R1):
         if   (col & C1): # select
             ActiveMenu.select()
@@ -481,7 +414,7 @@ def button_press(row, col):
             Sock.sendall(cmd)
             cmd = b'*RST\r\n'
             Sock.sendall(cmd)
-            sleep(CMD_WAIT)
+            sleep(AUTOSCALE_WAIT)
             get_reply()
             Scope.get_state()
             
@@ -532,24 +465,86 @@ def button_press(row, col):
         elif (col & C4): # ch4 scale knob
             pass
         elif (col & C5): # ch3
-            pass
+            if (not Scope.Channel3.enabled.value):
+                Scope.Channel3.enable()
+                ActiveMenu.disable()
+                ActiveMenu = Scope.Channel3.Menu
+                update_select_funcs()
+                ActiveMenu.enable()
+                ActiveMenu.display_menu()
+            elif (Scope.Channel3.enabled.value and not Scope.Channel3.Menu.is_active):
+                ActiveMenu.disable()
+                ActiveMenu = Scope.Channel3.Menu
+                update_select_funcs()
+                ActiveMenu.enable()
+                ActiveMenu.display_menu()
+            elif  (Scope.Channel3.enabled.value and Scope.Channel3.Menu.is_active):
+                Scope.Channel3.disable()
+                ActiveMenu.disable()
+                
         elif (col & C6): # ch4
-            pass
+            if (not Scope.Channel4.enabled.value):
+                Scope.Channel4.enable()
+                ActiveMenu.disable()
+                ActiveMenu = Scope.Channel4.Menu
+                update_select_funcs()
+                ActiveMenu.enable()
+                ActiveMenu.display_menu()
+            elif (Scope.Channel4.enabled.value and not Scope.Channel4.Menu.is_active):
+                ActiveMenu.disable()
+                ActiveMenu = Scope.Channel4.Menu
+                update_select_funcs()
+                ActiveMenu.enable()
+                ActiveMenu.display_menu()
+            elif  (Scope.Channel4.enabled.value and Scope.Channel4.Menu.is_active):
+                Scope.Channel4.disable()
+                ActiveMenu.disable()
+                
     elif (row & R6):
         if   (col & C1): # ch1
-            pass
+            if (not Scope.Channel1.enabled.value):
+                Scope.Channel1.enable()
+                ActiveMenu.disable()
+                ActiveMenu = Scope.Channel1.Menu
+                update_select_funcs()
+                ActiveMenu.enable()
+                ActiveMenu.display_menu()
+            elif (Scope.Channel1.enabled.value and not Scope.Channel1.Menu.is_active):
+                ActiveMenu.disable()
+                ActiveMenu = Scope.Channel1.Menu
+                update_select_funcs()
+                ActiveMenu.enable()
+                ActiveMenu.display_menu()
+            elif  (Scope.Channel1.enabled.value and Scope.Channel1.Menu.is_active):
+                Scope.Channel1.disable()
+                ActiveMenu.disable()
+                
         elif (col & C2): # ch2
-            pass
+            if (not Scope.Channel2.enabled.value):
+                Scope.Channel2.enable()
+                ActiveMenu.disable()
+                ActiveMenu = Scope.Channel2.Menu
+                update_select_funcs()
+                ActiveMenu.enable()
+                ActiveMenu.display_menu()
+            elif (Scope.Channel2.enabled.value and not Scope.Channel2.Menu.is_active):
+                ActiveMenu.disable()
+                ActiveMenu = Scope.Channel2.Menu
+                update_select_funcs()
+                ActiveMenu.enable()
+                ActiveMenu.display_menu()
+            elif  (Scope.Channel2.enabled.value and Scope.Channel2.Menu.is_active):
+                Scope.Channel2.disable()
+                ActiveMenu.disable()
+                
         elif (col & C3): #ch1 offset knob
-            Scope.ch1_offset = 0
-            cmd = b'CHAN1:OFFS +0E+0V\r\n'
-            Sock.sendall(cmd)
+            Scope.Channel1.zero_offset()
         elif (col & C4): # ch2 offset knob
-            pass
+            Scope.Channel2.zero_offset()
         elif (col & C5): # ch3 offset knob
-            pass
+            Scope.Channel3.zero_offset()
         elif (col & C6): # ch4 offset knob
-            pass
+            Scope.Channel4.zero_offset()
             
 
 # configure shutdown button
@@ -661,6 +656,9 @@ else:
             for i in range(1, 30):
                 lcd.cursor_pos = (1,16)
                 lcd.write_string(str(30-i) + "s")
+                if (30-i == 9):
+                    lcd.cursor_pos = (1,18)
+                    lcd.write(BLANK)
                 sleep(1)
             
     print ('Socket Connected to ip ' + remote_ip)
@@ -673,18 +671,12 @@ else:
 
 
 def main():
-    Scope.get_state()
     init_spi()
     init_encoders()
-    init_menus()
     lcd.clear()
     print("initialized")
     
-    global ActiveMenu 
-    ActiveMenu = ChannelMenu
-    
-    update_select_funcs()
-    
+    global ActiveMenu
     ActiveMenu.enable()
     ActiveMenu.display_menu()
     
@@ -763,210 +755,11 @@ def main():
         disable_backlight()
         #GPIO.cleanup()
         exit()
+  
         
 class ToggleSetting:
     def __init__(self, bool_value):
         self.value = bool_value
-
-class Scope:
-    # ch1
-    ch1_probe_aten = 0
-    ch1_scale_base_b = b'+5'
-    ch1_scale_base = 5
-    ch1_scale_exp_b = b'+0'
-    ch1_scale_exp = 0
-    ch1_scale = 5
-    ch1_offset = 0
-    ch1_offset_b = b'+0E+0'
-    
-    ch1_enabled = ToggleSetting(False)
-    ch1_ac_coupling = ToggleSetting(False)
-    
-    def __init__(self):
-        self.get_state()
-    
-    def get_state(self):
-        if (not SCOPELESS):
-            cmd = b'CHAN1:DISP?\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
-            
-            reply = get_reply()
-            reply = reply[::-1]
-            reply = reply[4:]
-            start = reply.index(b'\n')
-            reply = reply[:start]
-            reply = reply[::-1]
-            
-            if (reply[0:1] == b'0'):
-                self.ch1_enabled.value = False
-            elif (reply[0:1] == b'1'):
-                self.ch1_enabled.value = True
-            
-            
-            cmd = b'CHAN1:SCAL?\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
-            
-            reply = get_reply()
-            reply = reply[::-1]
-            reply = reply[4:]
-            start = reply.index(b'\n')
-            reply = reply[:start]
-            reply = reply[::-1]
-            
-            num_end = reply.index(b'E')
-            self.ch1_scale_base_b = reply[:num_end]
-            self.ch1_scale_exp_b = reply[num_end+1:]
-            
-            self.ch1_scale_base = ascii_to_num(self.ch1_scale_base_b)
-            self.ch1_scale_exp = ascii_to_num(self.ch1_scale_exp_b)
-            
-            self.ch1_scale = self.ch1_scale_base * 10 ** self.ch1_scale_exp
-            
-            
-            cmd = b'CHAN1:OFFS?\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
-            
-            reply = get_reply()
-            reply = reply[::-1]
-            reply = reply[4:]
-            start = reply.index(b'\n')
-            reply = reply[:start]
-            reply = reply[::-1]
-            self.ch1_offset_b = reply
-            
-            base_end = reply.index(b'E')
-            base = reply[:base_end]
-            exp = reply[num_end+1:]
-            base = ascii_to_num(base)
-            exp = ascii_to_num(exp)
-            
-            self.ch1_offset = base * 10 ** exp
-            
-            
-            cmd = b'CHAN1:COUP?\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
-            
-            reply = get_reply()
-            reply = reply[::-1]
-            reply = reply[4:]
-            start = reply.index(b'\n')
-            reply = reply[:start]
-            reply = reply[::-1]
-            
-            if (reply[0:1] == b'D'):
-                self.ch1_ac_coupling.value = False
-            elif (reply[0:1] == b'A'):
-                self.ch1_ac_coupling.value = True
-      
-
-    
-
-class Encoder:
-    a = 0
-    b = 0
-    ppr = 24
-    raw_count = 0
-    clockwise = False
-    
-    sensitivity = 1
-    count = 0
-    
-    detent = False
-    detent_max = 4
-    detent_count = 0
-    
-    enabled = False
-    
-    def __init__(self, a_bit, b_bit):
-        self.a_bit = a_bit
-        self.b_bit = b_bit
-        
-    def action(self):
-        if self.detent:
-            if ((self.detent_count >= self.detent_max) != (self.detent_count <= -1 * self.detent_max)):
-                self.detent_count = 0
-                if (self.clockwise):
-                    self.cw_action()
-                else:
-                    self.ccw_action()
-        else: 
-            if ((self.count >= self.sensitivity) != (self.count <= -1 * self.sensitivity)):
-                self.count = 0
-                if (self.clockwise):
-                    self.cw_action()
-                else:
-                    self.ccw_action()
-        
-    def adjust_count(self):
-        if (self.raw_count == 0 and not self.clockwise):
-            self.raw_count = self.ppr - 1
-        elif (self.raw_count == self.ppr - 1 and self.clockwise):
-            self.raw_count = 0
-        else :
-            self.raw_count += 1 if self.clockwise else -1
-            
-        if (self.detent_count < self.detent_max and self.clockwise):
-            self.detent_count += 1
-        elif (self.detent_count > -1 * self.detent_max and not self.clockwise):
-            self.detent_count += -1
-        
-        if (self.count < self.sensitivity and self.clockwise):
-            self.count += 1
-        elif (self.count > -1 * self.sensitivity and not self.clockwise):
-            self.count += -1
-            
-    
-    def update(self, byte):
-        a = (byte & (1<<self.a_bit)) >> self.a_bit
-        b = (byte & (1<<self.b_bit)) >> self.b_bit
-        if ((a != self.a) != (b != self.b)):
-            if (a != self.a):
-                self.clockwise = a != b
-            elif (b != self.b):
-                self.clockwise = a == b
-            self.adjust_count()
-            if self.enabled:
-                self.action()
-            else :
-                pass
-                #cmd = b'SYST:DSP "This control is disabled"\r\n'
-                #Sock.sendall(cmd)
-        self.a = a
-        self.b = b
-
-
-class EncoderBank:
-    encoders = []
-    
-    def __init__(self, device, gpio_addr):
-        self.device = device
-        self.gpio_addr = gpio_addr
-        
-    def set_encoders(self, encoders):
-        self.encoders = encoders
-        
-    def update_encoders(self):
-        spi.open(0,self.device)
-        spi.mode = SPI_MODE
-        spi.max_speed_hz = SPI_RATE
-        
-        to_send = [SPI_READ, self.gpio_addr, 0x00]
-        spi.xfer2(to_send)
-        spi.close()
-        
-        for e in self.encoders:
-            e.update(to_send[2])
-
-
-Scope = Scope()
-EncoderBank0A = EncoderBank(0, GPIOA)
-EncoderBank0B = EncoderBank(0, GPIOB)
-EncoderBank1A = EncoderBank(1, GPIOA)
-EncoderBank1B = EncoderBank(1, GPIOB)
 
 
 class MenuItem:
@@ -977,7 +770,6 @@ class MenuItem:
         
     def select(self):
         return
-        
         
 class Menu:
     is_active = False
@@ -1006,7 +798,6 @@ class Menu:
     def back(self):
         raise NotImplementedError
 
-
 class BlankMenu(Menu):
     def enable(self):
         return
@@ -1031,7 +822,6 @@ class BlankMenu(Menu):
         
     def back(self):
         return
-        
         
 class ToggleMenu(Menu):
     text = ""
@@ -1106,15 +896,14 @@ class ToggleMenu(Menu):
             self.container.enable()
             self.container.display_menu()
         
-        
 class ListMenu(Menu):
-    menu_items = []
     cursor = 0
     start_index = 0
     max_index = -1
     
     def __init__(self):
         super().__init__()
+        self.menu_items = []
     
     def set_menu(self, menu_items):
         self.menu_items = menu_items
@@ -1202,9 +991,344 @@ class ListMenu(Menu):
             self.container.display_menu()
 
 
+class Scope:
+    def __init__(self):
+        self.Channel1 = Channel(1)
+        self.Channel2 = Channel(2)
+        self.Channel3 = Channel(3)
+        self.Channel4 = Channel(4)
+        self.channels = [self.Channel1, self.Channel2, self.Channel3, self.Channel4]
+        
+        self.get_state()
+    
+    def get_state(self):
+        if (not SCOPELESS):
+            for c in self.channels:
+                c.get_state()
 
-ChannelMenu = ListMenu()
+    
+
+class Channel:
+    #give Menu instance
+    
+    probe_aten = 0                     #implement
+    scale_base_b = b'+5'
+    scale_base = 5
+    scale_exp_b = b'+0'
+    scale_exp = 0
+    scale = 5
+    offset = 0
+    offset_b = b'+0E+0'
+    
+    
+    def __init__(self, number):
+        if (number >=1 and number <= 4):
+            self.number = number
+            
+            self.enabled = ToggleSetting(True)
+            self.ac_coupling = ToggleSetting(False)
+            self.high_input_imped = ToggleSetting(True) #implement
+            self.bw_limit = ToggleSetting(False)        #implement
+            self.inverted = ToggleSetting(False)        #implement
+            
+            # Menus associated with each channel
+            self.Menu = ListMenu()
+            CouplingMenu = ToggleMenu("Coupling")
+            ACCoupling = MenuItem("AC")
+            ACCoupling.select = self.set_ac_coupling
+            DCCoupling = MenuItem("DC")
+            DCCoupling.select = self.set_dc_coupling
+            CouplingMenu.set_options(ACCoupling, DCCoupling, self.ac_coupling)
+            
+            ImpedanceMenu = MenuItem("Input Z")
+            BWLimitMenu = MenuItem("BW Limit")
+            InvertMenu = MenuItem("Invert")
+            ProbeSettingsMenu = MenuItem("Probe settings")
+            
+            ChannelMenuItems = [CouplingMenu, ImpedanceMenu, BWLimitMenu, InvertMenu, ProbeSettingsMenu]
+            self.Menu.set_menu(ChannelMenuItems)
+            Menu.container = BlankMenu()
+            
+        else:
+            raise ValueError('Invalid number used to initialize Channel class')
+    
+    def get_state(self):
+        if (not SCOPELESS):
+            cmd = b'CHAN' + str(self.number).encode() + b':DISP?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            if (reply[0:1] == b'0'):
+                self.enabled.value = False
+            elif (reply[0:1] == b'1'):
+                self.enabled.value = True
+            
+            cmd = b'CHAN'  + str(self.number).encode() + b':SCAL?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            num_end = reply.index(b'E')
+            self.scale_base_b = reply[:num_end]
+            self.scale_exp_b = reply[num_end+1:]
+            
+            self.scale_base = ascii_to_num(self.scale_base_b)
+            self.scale_exp = ascii_to_num(self.scale_exp_b)
+            
+            self.scale = self.scale_base * 10 ** self.scale_exp
+            
+            
+            cmd = b'CHAN'  + str(self.number).encode() + b':OFFS?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            self.offset_b = reply
+            
+            base_end = reply.index(b'E')
+            base = reply[:base_end]
+            exp = reply[num_end+1:]
+            base = ascii_to_num(base)
+            exp = ascii_to_num(exp)
+            
+            self.offset = base * 10 ** exp
+            
+            cmd = b'CHAN'  + str(self.number).encode() + b':COUP?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            if (reply[0:1] == b'D'):
+                self.ac_coupling.value = False
+            elif (reply[0:1] == b'A'):
+                self.ac_coupling.value = True
+                
+        
+    def enable(self):
+        cmd = b':CHAN' + str(self.number).encode() + b':DISP 1\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        self.enabled.value = True
+        
+    def disable(self):
+        cmd = b':CHAN' + str(self.number).encode() + b':DISP 0\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        self.enabled.value = False
+        
+    def zero_offset(self):
+        if (self.enabled.value):
+            self.offset = 0
+            cmd = b'CHAN' + str(self.number).encode() + b':OFFS +0E+0V\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+        
+    def cw_scale(self):
+        # deal with probe attenuation factor here
+        # fine adjustment?
+        
+        if (self.enabled.value and self.scale < 5):
+            if (self.scale_base_b[1:2] == b'1'):
+                self.scale_base = self.scale_base * 2
+                self.offset = self.offset * 2
+            elif (self.scale_base_b[1:2] == b'2'):
+                self.scale_base = self.scale_base * 2.5
+                self.offset = self.offset * 2.5
+            elif (self.scale_base_b[1:2] == b'5'):
+                self.scale_base = self.scale_base * 2 / 10
+                self.offset = self.offset * 2 / 10
+                self.scale_exp += 1
+                
+            #update state
+            self.scale = self.scale_base * 10 ** self.scale_exp
+            self.scale_base_b = num_to_ascii(self.scale_base, False)
+            self.scale_exp_b = num_to_ascii(self.scale_exp, True)
+            
+            cmd = b'CHAN' + str(self.number).encode() + b':SCAL ' + self.scale_base_b + b'E' + self.scale_exp_b + b'V\r\n'
+            Sock.sendall(cmd)
+        
+    def ccw_scale(self):
+        # deal with probe attenuation factor here
+        # fine adjustment?
+        
+        if (self.enabled.value and self.scale > 0.002):
+            if (self.scale_base_b[1:2] == b'1'):
+                self.scale_base = self.scale_base / 2 * 10
+                self.offset = self.offset * 2 / 10
+                self.scale_exp -= 1
+            elif (self.scale_base_b[1:2] == b'2'):
+                self.scale_base = self.scale_base / 2
+                self.offset = self.offset / 2
+            elif (self.scale_base_b[1:2] == b'5'):
+                self.scale_base = self.scale_base * 2 / 5
+                self.offset = self.offset * 2 / 5
+            
+            #update state
+            self.scale = self.scale_base * 10 ** self.scale_exp
+            self.scale_base_b = num_to_ascii(self.scale_base, False)
+            self.scale_exp_b = num_to_ascii(self.scale_exp, True)
+            
+            cmd = b'CHAN' + str(self.number).encode() + b':SCAL ' + self.scale_base_b + b'E' + self.scale_exp_b + b'V\r\n'
+            Sock.sendall(cmd)
+
+    def cw_offset(self):
+        if (self.enabled.value):
+            step = 0.125 * self.scale
+            self.offset -= step
+            
+            cmd = b'CHAN' + str(self.number).encode() + b':OFFS ' + "{:.6E}".format(self.offset).encode() + b'V\r\n'
+            Sock.sendall(cmd)
+        
+    def ccw_offset(self):
+        if (self.enabled.value):
+            step = 0.125 * self.scale
+            self.offset += step
+            
+            cmd = b'CHAN' + str(self.number).encode() + b':OFFS ' + "{:.6E}".format(self.offset).encode() + b'V\r\n'
+            Sock.sendall(cmd)
+        
+    def set_ac_coupling(self):
+        if (self.enabled.value):
+            cmd = b'CHAN' + str(self.number).encode() + b':COUP AC\r\n'
+            Sock.sendall(cmd)
+            self.ac_coupling.value = True
+        
+    def set_dc_coupling(self):
+        if (self.enabled.value):
+            cmd = b'CHAN' + str(self.number).encode() + b':COUP DC\r\n'
+            Sock.sendall(cmd)
+            self.ac_coupling.value = False
+
+
+class Encoder:
+    a = 0
+    b = 0
+    ppr = 24
+    raw_count = 0
+    clockwise = False
+    
+    sensitivity = 1
+    count = 0
+    
+    detent = False
+    detent_max = 4
+    detent_count = 0
+    
+    enabled = False
+    
+    def __init__(self, a_bit, b_bit):
+        self.a_bit = a_bit
+        self.b_bit = b_bit
+        
+    def action(self):
+        if self.detent:
+            if ((self.detent_count >= self.detent_max) != (self.detent_count <= -1 * self.detent_max)):
+                self.detent_count = 0
+                if (self.clockwise):
+                    self.cw_action()
+                else:
+                    self.ccw_action()
+        else: 
+            if ((self.count >= self.sensitivity) != (self.count <= -1 * self.sensitivity)):
+                self.count = 0
+                if (self.clockwise):
+                    self.cw_action()
+                else:
+                    self.ccw_action()
+        
+    def adjust_count(self):
+        if (self.raw_count == 0 and not self.clockwise):
+            self.raw_count = self.ppr - 1
+        elif (self.raw_count == self.ppr - 1 and self.clockwise):
+            self.raw_count = 0
+        else :
+            self.raw_count += 1 if self.clockwise else -1
+            
+        if (self.detent_count < self.detent_max and self.clockwise):
+            self.detent_count += 1
+        elif (self.detent_count > -1 * self.detent_max and not self.clockwise):
+            self.detent_count += -1
+        
+        if (self.count < self.sensitivity and self.clockwise):
+            self.count += 1
+        elif (self.count > -1 * self.sensitivity and not self.clockwise):
+            self.count += -1
+            
+    
+    def update(self, byte):
+        a = (byte & (1<<self.a_bit)) >> self.a_bit
+        b = (byte & (1<<self.b_bit)) >> self.b_bit
+        if ((a != self.a) != (b != self.b)):
+            if (a != self.a):
+                self.clockwise = a != b
+            elif (b != self.b):
+                self.clockwise = a == b
+            self.adjust_count()
+            if self.enabled:
+                self.action()
+            else :
+                pass
+                #cmd = b'SYST:DSP "This control is disabled"\r\n'
+                #Sock.sendall(cmd)
+        self.a = a
+        self.b = b
+
+
+class EncoderBank:
+    
+    def __init__(self, device, gpio_addr):
+        self.device = device
+        self.gpio_addr = gpio_addr
+        self.encoders = []
+        
+    def set_encoders(self, encoders):
+        self.encoders = encoders
+        
+    def update_encoders(self):
+        spi.open(0,self.device)
+        spi.mode = SPI_MODE
+        spi.max_speed_hz = SPI_RATE
+        
+        to_send = [SPI_READ, self.gpio_addr, 0x00]
+        spi.xfer2(to_send)
+        spi.close()
+        
+        for e in self.encoders:
+            e.update(to_send[2])
+
+
 ActiveMenu = BlankMenu()
+
+Scope = Scope()
+
+EncoderBank0A = EncoderBank(0, GPIOA)
+EncoderBank0B = EncoderBank(0, GPIOB)
+EncoderBank1A = EncoderBank(1, GPIOA)
+EncoderBank1B = EncoderBank(1, GPIOB)
 
 if __name__ == "__main__":
     main()

@@ -330,9 +330,15 @@ def init_encoders():
     
     # Bank 1A
     Timebase = Encoder(A_HORIZ, B_HORIZ)
+    Timebase.enabled = True
     Timebase.detent = True
+    Timebase.cw_action = Scope.Timebase.cw_scale
+    Timebase.ccw_action = Scope.Timebase.ccw_scale
     
     Delay = Encoder(A_DELAY, B_DELAY)
+    Delay.enabled = True
+    Delay.cw_action = Scope.Timebase.cw_delay
+    Delay.ccw_action = Scope.Timebase.ccw_delay
     
     Select = Encoder(A_SEL, B_SEL)
     Select.enabled = True
@@ -373,9 +379,17 @@ def button_press(row, col):
         elif (col & C2): # back
             ActiveMenu.back()
         elif (col & C3): # horizontal
-            pass
+            if (not Scope.Timebase.Menu.is_active):
+                ActiveMenu.disable()
+                ActiveMenu = Scope.Timebase.Menu
+                update_select_funcs()
+                ActiveMenu.enable()
+                ActiveMenu.display_menu()
+            elif  (Scope.Timebase.Menu.is_active):
+                ActiveMenu.disable()
+                
         elif (col & C4): # delay knob
-            pass
+            Scope.Timebase.zero_delay()
             
         elif (col & C5): # run/stop
             cmd = b':OPER:COND?\r\n'
@@ -408,7 +422,11 @@ def button_press(row, col):
         if   (col & C1): # horizontal scale knob
             pass
         elif (col & C2): # zoom
-            pass
+            if (not Scope.Timebase.mode[0:1] == b'W'):
+                Scope.Timebase.set_mode_window()
+            else:
+                Scope.Timebase.set_mode_main()
+                
         elif (col & C3): # default setup
             cmd = b'*CLS\r\n'
             Sock.sendall(cmd)
@@ -426,7 +444,7 @@ def button_press(row, col):
             Scope.get_state()
             
         elif (col & C5): # math scale knob
-            passcmd = b'CHAN1:OFFS +0E+0V\r\n'
+            pass
         elif (col & C6): # invalid input
             pass 
     elif (row & R3):
@@ -444,15 +462,22 @@ def button_press(row, col):
             pass
     elif (row & R4):
         if   (col & C1): # acquire
-            pass
-        elif (col & C2): # dsiplay
-            pass
+            cmd = b'TIM:POS +4E-04\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+        elif (col & C2): # display
+            Scope.Timebase.set_mode_main()
+            
         elif (col & C3): # label
-            pass
+            Scope.Timebase.set_mode_window()
+            
         elif (col & C4): # save/recall
-            pass
+            Scope.Timebase.set_mode_xy()
+            
         elif (col & C5): # utility
-            pass
+            Scope.Timebase.set_mode_roll()
+            
         elif (col & C6): # math offset knob
             pass
     elif (row & R5):
@@ -465,40 +490,42 @@ def button_press(row, col):
         elif (col & C4): # ch4 scale knob
             pass
         elif (col & C5): # ch3
-            if (not Scope.Channel3.enabled.value):
-                Scope.Channel3.enable()
-                ActiveMenu.disable()
-                ActiveMenu = Scope.Channel3.Menu
-                update_select_funcs()
-                ActiveMenu.enable()
-                ActiveMenu.display_menu()
-            elif (Scope.Channel3.enabled.value and not Scope.Channel3.Menu.is_active):
-                ActiveMenu.disable()
-                ActiveMenu = Scope.Channel3.Menu
-                update_select_funcs()
-                ActiveMenu.enable()
-                ActiveMenu.display_menu()
-            elif  (Scope.Channel3.enabled.value and Scope.Channel3.Menu.is_active):
-                Scope.Channel3.disable()
-                ActiveMenu.disable()
+            if (Scope.Timebase.mode[0:1] != b'X'): # only channels 1/2 active in XY mode
+                if (not Scope.Channel3.enabled.value):
+                    Scope.Channel3.enable()
+                    ActiveMenu.disable()
+                    ActiveMenu = Scope.Channel3.Menu
+                    update_select_funcs()
+                    ActiveMenu.enable()
+                    ActiveMenu.display_menu()
+                elif (Scope.Channel3.enabled.value and not Scope.Channel3.Menu.is_active):
+                    ActiveMenu.disable()
+                    ActiveMenu = Scope.Channel3.Menu
+                    update_select_funcs()
+                    ActiveMenu.enable()
+                    ActiveMenu.display_menu()
+                elif  (Scope.Channel3.enabled.value and Scope.Channel3.Menu.is_active):
+                    Scope.Channel3.disable()
+                    ActiveMenu.disable()
                 
         elif (col & C6): # ch4
-            if (not Scope.Channel4.enabled.value):
-                Scope.Channel4.enable()
-                ActiveMenu.disable()
-                ActiveMenu = Scope.Channel4.Menu
-                update_select_funcs()
-                ActiveMenu.enable()
-                ActiveMenu.display_menu()
-            elif (Scope.Channel4.enabled.value and not Scope.Channel4.Menu.is_active):
-                ActiveMenu.disable()
-                ActiveMenu = Scope.Channel4.Menu
-                update_select_funcs()
-                ActiveMenu.enable()
-                ActiveMenu.display_menu()
-            elif  (Scope.Channel4.enabled.value and Scope.Channel4.Menu.is_active):
-                Scope.Channel4.disable()
-                ActiveMenu.disable()
+            if (Scope.Timebase.mode[0:1] != b'X'): # only channels 1/2 active in XY mode
+                if (not Scope.Channel4.enabled.value):
+                    Scope.Channel4.enable()
+                    ActiveMenu.disable()
+                    ActiveMenu = Scope.Channel4.Menu
+                    update_select_funcs()
+                    ActiveMenu.enable()
+                    ActiveMenu.display_menu()
+                elif (Scope.Channel4.enabled.value and not Scope.Channel4.Menu.is_active):
+                    ActiveMenu.disable()
+                    ActiveMenu = Scope.Channel4.Menu
+                    update_select_funcs()
+                    ActiveMenu.enable()
+                    ActiveMenu.display_menu()
+                elif  (Scope.Channel4.enabled.value and Scope.Channel4.Menu.is_active):
+                    Scope.Channel4.disable()
+                    ActiveMenu.disable()
                 
     elif (row & R6):
         if   (col & C1): # ch1
@@ -516,7 +543,8 @@ def button_press(row, col):
                 ActiveMenu.enable()
                 ActiveMenu.display_menu()
             elif  (Scope.Channel1.enabled.value and Scope.Channel1.Menu.is_active):
-                Scope.Channel1.disable()
+                if (Scope.Timebase.mode[0:1] != b'X'): # can't disable channel 1 in xy mode
+                    Scope.Channel1.disable()
                 ActiveMenu.disable()
                 
         elif (col & C2): # ch2
@@ -534,7 +562,8 @@ def button_press(row, col):
                 ActiveMenu.enable()
                 ActiveMenu.display_menu()
             elif  (Scope.Channel2.enabled.value and Scope.Channel2.Menu.is_active):
-                Scope.Channel2.disable()
+                if (Scope.Timebase.mode[0:1] != b'X'): # can't disable channel 2 in xy mode
+                    Scope.Channel2.disable()
                 ActiveMenu.disable()
                 
         elif (col & C3): #ch1 offset knob
@@ -681,7 +710,7 @@ def main():
     ActiveMenu.display_menu()
     
  
-    try:
+    try: 
         #events = 0
         c = 0
         
@@ -751,9 +780,14 @@ def main():
     except Exception as e:
         print(e)
         Sock.close()
+        ActiveMenu.disable()
+        lcd.clear()
+        lcd.write_string("An unexpected error\r\noccurred.\r\n\nRestarting...")
+        sleep(3)
         disable_power()
         disable_backlight()
-        #GPIO.cleanup()
+        GPIO.cleanup()
+        check_call(['./scope.py'])
         exit()
   
         
@@ -822,10 +856,97 @@ class BlankMenu(Menu):
         
     def back(self):
         return
+
+"""
+class TextMenu(Menu):
+    is_active = False
+    menu_text = ""
+    splash_text = ""
+    
+    def __init__(self, menu_text, splash_text):
+        super().__init__()
+        self.menu_text = menu_text
+        self.splash_text = splash_text
         
+    def enable(self):
+        if (len(splash_text) > 0):
+            self.is_active = True
+            
+    def disable(self):
+        if (self.is_active):
+            self.is_active = False
+            lcd.clear()
+            
+    def display_menu(self):
+        if (self.is_active):
+            lcd.clear()
+            l = len(splash_text)
+            if (l =< 20):
+                lcd.write_string(self.splash_text)
+            elif (l > 20 and l <= 40):
+                lcd.write_string(self.splash_text[0:19])
+                lcd.cursor_pos = (1,0)
+                lcd.write_string(self.splash_text[20:])
+            elif (l > 40 and l <= 60):
+                lcd.write_string(self.splash_text[0:19])
+                lcd.cursor_pos = (1,0)
+                lcd.write_string(self.splash_text[20:39])
+                lcd.cursor_pos = (2,0)
+                lcd.write_string(self.splash_text[40:])
+            elif (l > 60 and l <= 80):
+                lcd.write_string(self.splash_text[0:19])
+                lcd.cursor_pos = (1,0)
+                lcd.write_string(self.splash_text[20:39])
+                lcd.cursor_pos = (2,0)
+                lcd.write_string(self.splash_text[40:59])
+                lcd.cursor_pos = (3,0)
+                lcd.write_string(self.splash_text[60:])
+            else:
+                lcd.write_string(self.splash_text[0:19])
+                lcd.cursor_pos = (1,0)
+                lcd.write_string(self.splash_text[20:39])
+                lcd.cursor_pos = (2,0)
+                lcd.write_string(self.splash_text[40:59])
+                lcd.cursor_pos = (3,0)
+                lcd.write_string(self.splash_text[60:79])
+        
+    def display_cursor(self):
+        return
+        
+    def increment_cursor(self):
+        return
+        
+    def decrement_cursor(self):
+        return
+            
+    def select(self):
+        if (not self.is_active):
+            self.container.disable()
+            global ActiveMenu 
+            ActiveMenu = self
+            update_select_funcs()
+            self.enable()
+            self.display_menu()
+        else:
+            self.active_select()
+            
+    def active_select(self):
+        return
+    
+    def back(self):
+        if (self.is_active):
+            self.disable()
+            global ActiveMenu 
+            ActiveMenu = self.container
+            update_select_funcs()
+            self.container.enable()
+            self.container.display_menu()
+"""
+
 class ToggleMenu(Menu):
     text = ""
     options_set = False
+    is_active = False
     
     def __init__(self, text):
         super().__init__()
@@ -900,6 +1021,7 @@ class ListMenu(Menu):
     cursor = 0
     start_index = 0
     max_index = -1
+    is_active = False
     
     def __init__(self):
         super().__init__()
@@ -999,17 +1121,19 @@ class Scope:
         self.Channel4 = Channel(4)
         self.channels = [self.Channel1, self.Channel2, self.Channel3, self.Channel4]
         
+        self.Timebase = Timebase()
+        
         self.get_state()
     
     def get_state(self):
         if (not SCOPELESS):
             for c in self.channels:
                 c.get_state()
+                
+            self.Timebase.get_state()
 
-    
 
 class Channel:
-    #give Menu instance
     
     probe_aten = 0                     #implement
     scale_base_b = b'+5'
@@ -1032,7 +1156,6 @@ class Channel:
             self.inverted = ToggleSetting(False)        #implement
             
             # Menus associated with each channel
-            self.Menu = ListMenu()
             CouplingMenu = ToggleMenu("Coupling")
             ACCoupling = MenuItem("AC")
             ACCoupling.select = self.set_ac_coupling
@@ -1046,6 +1169,8 @@ class Channel:
             ProbeSettingsMenu = MenuItem("Probe settings")
             
             ChannelMenuItems = [CouplingMenu, ImpedanceMenu, BWLimitMenu, InvertMenu, ProbeSettingsMenu]
+            
+            self.Menu = ListMenu()
             self.Menu.set_menu(ChannelMenuItems)
             Menu.container = BlankMenu()
             
@@ -1105,7 +1230,7 @@ class Channel:
             
             base_end = reply.index(b'E')
             base = reply[:base_end]
-            exp = reply[num_end+1:]
+            exp = reply[base_end+1:]
             base = ascii_to_num(base)
             exp = ascii_to_num(exp)
             
@@ -1129,99 +1254,337 @@ class Channel:
                 
         
     def enable(self):
-        cmd = b':CHAN' + str(self.number).encode() + b':DISP 1\r\n'
-        Sock.sendall(cmd)
-        sleep(CMD_WAIT)
-        self.enabled.value = True
-        
-    def disable(self):
-        cmd = b':CHAN' + str(self.number).encode() + b':DISP 0\r\n'
-        Sock.sendall(cmd)
-        sleep(CMD_WAIT)
-        self.enabled.value = False
-        
-    def zero_offset(self):
-        if (self.enabled.value):
-            self.offset = 0
-            cmd = b'CHAN' + str(self.number).encode() + b':OFFS +0E+0V\r\n'
+        if (not SCOPELESS):
+            cmd = b':CHAN' + str(self.number).encode() + b':DISP 1\r\n'
             Sock.sendall(cmd)
             sleep(CMD_WAIT)
+            self.enabled.value = True
+        
+    def disable(self):
+        if (not SCOPELESS):
+            cmd = b':CHAN' + str(self.number).encode() + b':DISP 0\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            self.enabled.value = False
+        
+    def zero_offset(self):
+        if (not SCOPELESS and self.enabled.value):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                self.offset = 0
+                cmd = b'CHAN' + str(self.number).encode() + b':OFFS +0E+0V\r\n'
+                Sock.sendall(cmd)
+                sleep(CMD_WAIT)
         
     def cw_scale(self):
         # deal with probe attenuation factor here
         # fine adjustment?
         
-        if (self.enabled.value and self.scale < 5):
-            if (self.scale_base_b[1:2] == b'1'):
-                self.scale_base = self.scale_base * 2
-                self.offset = self.offset * 2
-            elif (self.scale_base_b[1:2] == b'2'):
-                self.scale_base = self.scale_base * 2.5
-                self.offset = self.offset * 2.5
-            elif (self.scale_base_b[1:2] == b'5'):
-                self.scale_base = self.scale_base * 2 / 10
-                self.offset = self.offset * 2 / 10
-                self.scale_exp += 1
+        if (not SCOPELESS and self.enabled.value and self.scale < 5):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                if (self.scale_base_b[1:2] == b'1'):
+                    self.scale_base = self.scale_base * 2
+                    self.offset = self.offset * 2
+                elif (self.scale_base_b[1:2] == b'2'):
+                    self.scale_base = self.scale_base * 2.5
+                    self.offset = self.offset * 2.5
+                elif (self.scale_base_b[1:2] == b'5'):
+                    self.scale_base = self.scale_base * 2 / 10
+                    self.offset = self.offset * 2 / 10
+                    self.scale_exp += 1
+                    
+                #update state
+                self.scale = self.scale_base * 10 ** self.scale_exp
+                self.scale_base_b = num_to_ascii(self.scale_base, False)
+                self.scale_exp_b = num_to_ascii(self.scale_exp, True)
                 
-            #update state
-            self.scale = self.scale_base * 10 ** self.scale_exp
-            self.scale_base_b = num_to_ascii(self.scale_base, False)
-            self.scale_exp_b = num_to_ascii(self.scale_exp, True)
-            
-            cmd = b'CHAN' + str(self.number).encode() + b':SCAL ' + self.scale_base_b + b'E' + self.scale_exp_b + b'V\r\n'
-            Sock.sendall(cmd)
+                cmd = b'CHAN' + str(self.number).encode() + b':SCAL ' + self.scale_base_b + b'E' + self.scale_exp_b + b'V\r\n'
+                Sock.sendall(cmd)
         
     def ccw_scale(self):
         # deal with probe attenuation factor here
         # fine adjustment?
         
-        if (self.enabled.value and self.scale > 0.002):
+        if (not SCOPELESS and self.enabled.value and self.scale > 0.002):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                if (self.scale_base_b[1:2] == b'1'):
+                    self.scale_base = self.scale_base / 2 * 10
+                    self.offset = self.offset * 2 / 10
+                    self.scale_exp -= 1
+                elif (self.scale_base_b[1:2] == b'2'):
+                    self.scale_base = self.scale_base / 2
+                    self.offset = self.offset / 2
+                elif (self.scale_base_b[1:2] == b'5'):
+                    self.scale_base = self.scale_base * 2 / 5
+                    self.offset = self.offset * 2 / 5
+                
+                #update state
+                self.scale = self.scale_base * 10 ** self.scale_exp
+                self.scale_base_b = num_to_ascii(self.scale_base, False)
+                self.scale_exp_b = num_to_ascii(self.scale_exp, True)
+                
+                cmd = b'CHAN' + str(self.number).encode() + b':SCAL ' + self.scale_base_b + b'E' + self.scale_exp_b + b'V\r\n'
+                Sock.sendall(cmd)
+
+    def cw_offset(self):
+        if (not SCOPELESS and self.enabled.value):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                step = 0.125 * self.scale
+                self.offset -= step
+                
+                cmd = b'CHAN' + str(self.number).encode() + b':OFFS ' + "{:.6E}".format(self.offset).encode() + b'V\r\n'
+                Sock.sendall(cmd)
+        
+    def ccw_offset(self):
+        if (not SCOPELESS and self.enabled.value):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                step = 0.125 * self.scale
+                self.offset += step
+                
+                cmd = b'CHAN' + str(self.number).encode() + b':OFFS ' + "{:.6E}".format(self.offset).encode() + b'V\r\n'
+                Sock.sendall(cmd)
+        
+    def set_ac_coupling(self):
+        if (not SCOPELESS and self.enabled.value):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                cmd = b'CHAN' + str(self.number).encode() + b':COUP AC\r\n'
+                Sock.sendall(cmd)
+                self.ac_coupling.value = True
+        
+    def set_dc_coupling(self):
+        if (not SCOPELESS and self.enabled.value):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                cmd = b'CHAN' + str(self.number).encode() + b':COUP DC\r\n'
+                Sock.sendall(cmd)
+                self.ac_coupling.value = False
+
+
+class Timebase:
+    mode = b'MAIN'
+    reference = b'CENT'
+    scale_base_b = b'+5'
+    scale_base = 5
+    scale_exp_b = b'+0'
+    scale_exp = 0
+    scale = 5
+    position = 0
+    position_b = b'+0E+0'
+    
+    def __init__(self):
+        MainMode = MenuItem("Main")
+        MainMode.select = self.set_mode_main
+        WindowMode = MenuItem("Window")            # unimplemented: window scale/position
+        WindowMode.select = self.set_mode_window
+        XYMode = MenuItem("XY")
+        XYMode.select = self.set_mode_xy
+        RollMode = MenuItem("Roll")
+        RollMode.select = self.set_mode_roll
+        
+        ModeMenuItems = [MainMode, WindowMode, XYMode, RollMode]
+        ModeMenu = ListMenu()
+        ModeMenu.set_menu(ModeMenuItems)
+        ModeMenu.text = "Mode"
+        
+        
+        RefLeft = MenuItem("Left")
+        RefLeft.select = self.set_ref_left
+        RefCent = MenuItem("Center")
+        RefCent.select = self.set_ref_center
+        RefRight = MenuItem("Right")
+        RefRight.select = self.set_ref_right
+        
+        RefMenuItems = [RefLeft, RefCent, RefRight]
+        RefMenu = ListMenu()
+        RefMenu.set_menu(RefMenuItems)
+        RefMenu.text = "Reference"
+        
+        
+        TimebaseMenuItems = [ModeMenu, RefMenu]
+        self.Menu = ListMenu()
+        self.Menu.set_menu(TimebaseMenuItems)
+        self.Menu.container = BlankMenu()
+    
+    def get_state(self):
+        if (not SCOPELESS):
+            cmd = b'TIM:MODE?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            self.mode = reply
+            
+            cmd = b'TIM:REF?\r\n'
+            Sock.sendall(cmd)
+            sleep(2*CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            self.reference = reply
+            
+            cmd = b'TIM:SCAL?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            num_end = reply.index(b'E')
+            self.scale_base_b = reply[:num_end]
+            self.scale_exp_b = reply[num_end+1:]
+            
+            self.scale_base = ascii_to_num(self.scale_base_b)
+            self.scale_exp = ascii_to_num(self.scale_exp_b)
+            
+            self.scale = self.scale_base * 10 ** self.scale_exp
+            
+            cmd = b'TIM:POS?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            self.position_b = reply
+            
+            base_end = reply.index(b'E')
+            base = reply[:base_end]
+            exp = reply[base_end+1:]
+            base = ascii_to_num(base)
+            exp = ascii_to_num(exp)
+            
+            self.position = base * 10 ** exp
+            
+    def zero_delay(self):
+        if (not SCOPELESS):
+            self.position = 0
+            cmd = b'TIM:POS +0E+0\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+                
+    def cw_delay(self):
+        if (not SCOPELESS):
+            step = 0.125 * self.scale
+            self.position -= step
+            
+            cmd = b'TIM:POS ' + "{:.6E}".format(self.position).encode() + b'\r\n'
+            Sock.sendall(cmd)
+        
+    def ccw_delay(self):
+        if (not SCOPELESS):
+            step = 0.125 * self.scale
+            self.position += step
+            
+            cmd = b'TIM:POS ' + "{:.6E}".format(self.position).encode() + b'\r\n'
+            Sock.sendall(cmd)
+       
+    def cw_scale(self):
+        # fine adjustment?
+        
+        if (not SCOPELESS and self.mode[0:1] != b'X' and self.scale < 50):
+            if (self.scale_base_b[1:2] == b'1'):
+                self.scale_base = self.scale_base * 2
+            elif (self.scale_base_b[1:2] == b'2'):
+                self.scale_base = self.scale_base * 2.5
+            elif (self.scale_base_b[1:2] == b'5'):
+                self.scale_base = self.scale_base * 2 / 10
+                self.scale_exp += 1
+                    
+            #update state
+            self.scale = self.scale_base * 10 ** self.scale_exp
+            self.scale_base_b = num_to_ascii(self.scale_base, False)
+            self.scale_exp_b = num_to_ascii(self.scale_exp, True)
+            
+            cmd = b'TIM:SCAL ' + self.scale_base_b + b'E' + self.scale_exp_b + b'\r\n'
+            Sock.sendall(cmd)
+        
+    def ccw_scale(self):
+        # fine adjustment?
+        min_scale = 500 * (10 ** -12) if (self.mode[0:1] != b'R') else 100 * (10 ** -3) 
+        
+        if (not SCOPELESS and self.mode[0:1] != b'X' and self.scale > min_scale):
             if (self.scale_base_b[1:2] == b'1'):
                 self.scale_base = self.scale_base / 2 * 10
-                self.offset = self.offset * 2 / 10
                 self.scale_exp -= 1
             elif (self.scale_base_b[1:2] == b'2'):
                 self.scale_base = self.scale_base / 2
-                self.offset = self.offset / 2
             elif (self.scale_base_b[1:2] == b'5'):
                 self.scale_base = self.scale_base * 2 / 5
-                self.offset = self.offset * 2 / 5
             
             #update state
             self.scale = self.scale_base * 10 ** self.scale_exp
             self.scale_base_b = num_to_ascii(self.scale_base, False)
             self.scale_exp_b = num_to_ascii(self.scale_exp, True)
             
-            cmd = b'CHAN' + str(self.number).encode() + b':SCAL ' + self.scale_base_b + b'E' + self.scale_exp_b + b'V\r\n'
+            cmd = b'TIM:SCAL ' + self.scale_base_b + b'E' + self.scale_exp_b + b'\r\n'
             Sock.sendall(cmd)
-
-    def cw_offset(self):
-        if (self.enabled.value):
-            step = 0.125 * self.scale
-            self.offset -= step
+    
+    def set_mode_main(self):
+        if (not SCOPELESS and not self.mode[0:1] == b'M'):
+            self.mode = b'MAIN'
+            cmd = b'TIM:MODE '+ self.mode + b'\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+    
+    def set_mode_window(self):
+        if (not SCOPELESS and not self.mode[0:1] == b'W'):
+            self.mode = b'WIND'
+            cmd = b'TIM:MODE '+ self.mode + b'\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
             
-            cmd = b'CHAN' + str(self.number).encode() + b':OFFS ' + "{:.6E}".format(self.offset).encode() + b'V\r\n'
+    def set_mode_xy(self):
+        if (not SCOPELESS and not self.mode[0:1] == b'X'):
+            self.mode = b'XY'
+            cmd = b'TIM:MODE '+ self.mode + b'\r\n'
             Sock.sendall(cmd)
-        
-    def ccw_offset(self):
-        if (self.enabled.value):
-            step = 0.125 * self.scale
-            self.offset += step
+            sleep(CMD_WAIT)
             
-            cmd = b'CHAN' + str(self.number).encode() + b':OFFS ' + "{:.6E}".format(self.offset).encode() + b'V\r\n'
+    def set_mode_roll(self):
+        if (not SCOPELESS and not self.mode[0:1] == b'R'):
+            self.mode = b'ROLL'
+            cmd = b'TIM:MODE '+ self.mode + b'\r\n'
             Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            self.get_state()
         
-    def set_ac_coupling(self):
-        if (self.enabled.value):
-            cmd = b'CHAN' + str(self.number).encode() + b':COUP AC\r\n'
-            Sock.sendall(cmd)
-            self.ac_coupling.value = True
         
-    def set_dc_coupling(self):
-        if (self.enabled.value):
-            cmd = b'CHAN' + str(self.number).encode() + b':COUP DC\r\n'
+    def set_ref_left(self):
+        if (not SCOPELESS and not (self.mode[0:1] == b'X' or self.mode[0:1] == b'R')):
+            self.reference = b'LEFT'
+            cmd = b'TIM:REF '+ self.reference + b'\r\n'
             Sock.sendall(cmd)
-            self.ac_coupling.value = False
+            sleep(CMD_WAIT)
+            
+    def set_ref_center(self):
+        if (not SCOPELESS and not (self.mode[0:1] == b'X' or self.mode[0:1] == b'R')):
+            self.reference = b'CENT'
+            cmd = b'TIM:REF '+ self.reference + b'\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+    def set_ref_right(self):
+        if (not SCOPELESS and not (self.mode[0:1] == b'X' or self.mode[0:1] == b'R')):
+            self.reference = b'RIGH'
+            cmd = b'TIM:REF '+ self.reference + b'\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
 
 
 class Encoder:
@@ -1296,7 +1659,6 @@ class Encoder:
                 #Sock.sendall(cmd)
         self.a = a
         self.b = b
-
 
 class EncoderBank:
     

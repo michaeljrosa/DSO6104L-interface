@@ -451,7 +451,10 @@ def button_press(row, col):
         if   (col & C1): # trigger 
             pass
         elif (col & C2): # trigger level knob
-            pass
+            cmd = b':TRIG:LFIF\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
         elif (col & C3): # measure
             pass
         elif (col & C4): # cursors
@@ -462,21 +465,19 @@ def button_press(row, col):
             pass
     elif (row & R4):
         if   (col & C1): # acquire
-            cmd = b'TIM:POS +4E-04\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
+            pass
             
         elif (col & C2): # display
-            Scope.Timebase.set_mode_main()
+            pass
             
         elif (col & C3): # label
-            Scope.Timebase.set_mode_window()
+            pass
             
         elif (col & C4): # save/recall
-            Scope.Timebase.set_mode_xy()
+            pass
             
         elif (col & C5): # utility
-            Scope.Timebase.set_mode_roll()
+            pass
             
         elif (col & C6): # math offset knob
             pass
@@ -1122,6 +1123,7 @@ class Scope:
         self.channels = [self.Channel1, self.Channel2, self.Channel3, self.Channel4]
         
         self.Timebase = Timebase()
+        self.Trigger = Trigger()
         
         self.get_state()
     
@@ -1131,6 +1133,7 @@ class Scope:
                 c.get_state()
                 
             self.Timebase.get_state()
+            self.Trigger.get_state()
 
 
 class Channel:
@@ -1586,6 +1589,118 @@ class Timebase:
             Sock.sendall(cmd)
             sleep(CMD_WAIT)
 
+
+class Trigger:
+    
+    sweep = b'AUTO'
+    mode = b'EDGE'
+    #holdoff = 0
+    
+    def __init__(self):
+        self.HFReject = ToggleSetting(False)
+        self.NReject = ToggleSetting(False)
+        
+        #menus
+        
+    def get_state(self):
+        if (not SCOPELESS):
+            cmd = b':TRIG:HFR?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            if (reply[0:1] == b'0'):
+                self.HFReject.value = False
+            elif (reply[0:1] == b'1'):
+                self.HFReject.value = True
+                
+                
+            cmd = b':TRIG:NREJ?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            if (reply[0:1] == b'0'):
+                self.NReject.value = False
+            elif (reply[0:1] == b'1'):
+                self.NReject.value = True
+                
+            
+            cmd = b':TRIG:MODE?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            self.mode = reply
+            
+            
+            cmd = b':TRIG:SWE?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            self.sweep = reply
+            
+    def enable_HFRej(self):
+        if (not SCOPELESS):
+            self.HFReject.value = True
+            cmd = b':TRIG:HFR 1\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+    def disable_HFRej(self):
+        if (not SCOPELESS):
+            self.HFReject.value = False
+            cmd = b':TRIG:HFR 0\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+    def enable_NRej(self):
+        if (not SCOPELESS):
+            self.NReject.value = True
+            cmd = b':TRIG:NREJ 1\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+    def disable_NRej(self):
+        if (not SCOPELESS):
+            self.NReject.value = False
+            cmd = b':TRIG:NREJ 0\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+    def set_mode_edge(self):
+        if (not SCOPELESS):
+            self.mode = b'EDGE'
+            cmd = b':TRIG:MODE ' + self.mode + b'\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+        
+            
 
 class Encoder:
     a = 0

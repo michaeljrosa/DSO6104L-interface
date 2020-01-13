@@ -1178,14 +1178,14 @@ class Channel: # probe attenuation
             BWLimitOn.select = self.set_bw_limit
             BWLimitOff = MenuItem("Off")
             BWLimitOff.select = self.unset_bw_limit
-            BWLimitMenu = set_options(BWLimitOn, BWLimitOff, self.bw_limit)
+            BWLimitMenu.set_options(BWLimitOn, BWLimitOff, self.bw_limit)
             
             InvertMenu = ToggleMenu("Invert")
             InvertOn = MenuItem("On")
             InvertOn.select = self.set_invert
             InvertOff = MenuItem("Off")
             InvertOff.select = self.unset_invert
-            InvertMenu = set_options(InvertOn, InvertOff, self.inverted)
+            InvertMenu.set_options(InvertOn, InvertOff, self.inverted)
             
             ProbeSettingsMenu = MenuItem("Probe settings") #implement
             

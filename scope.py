@@ -451,7 +451,10 @@ def button_press(row, col):
         if   (col & C1): # trigger 
             pass
         elif (col & C2): # trigger level knob
-            pass
+            cmd = b':TRIG:LFIF\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
         elif (col & C3): # measure
             pass
         elif (col & C4): # cursors
@@ -462,21 +465,19 @@ def button_press(row, col):
             pass
     elif (row & R4):
         if   (col & C1): # acquire
-            cmd = b'TIM:POS +4E-04\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
+            pass
             
         elif (col & C2): # display
-            Scope.Timebase.set_mode_main()
+            pass
             
         elif (col & C3): # label
-            Scope.Timebase.set_mode_window()
+            pass
             
         elif (col & C4): # save/recall
-            Scope.Timebase.set_mode_xy()
+            pass
             
         elif (col & C5): # utility
-            Scope.Timebase.set_mode_roll()
+            pass
             
         elif (col & C6): # math offset knob
             pass
@@ -1122,6 +1123,7 @@ class Scope:
         self.channels = [self.Channel1, self.Channel2, self.Channel3, self.Channel4]
         
         self.Timebase = Timebase()
+        self.Trigger = Trigger()
         
         self.get_state()
     
@@ -1131,9 +1133,10 @@ class Scope:
                 c.get_state()
                 
             self.Timebase.get_state()
+            self.Trigger.get_state()
 
 
-class Channel:
+class Channel: # probe attenuation
     
     probe_aten = 0                     #implement
     scale_base_b = b'+5'
@@ -1151,9 +1154,9 @@ class Channel:
             
             self.enabled = ToggleSetting(True)
             self.ac_coupling = ToggleSetting(False)
-            self.high_input_imped = ToggleSetting(True) #implement
-            self.bw_limit = ToggleSetting(False)        #implement
-            self.inverted = ToggleSetting(False)        #implement
+            self.high_input_imped = ToggleSetting(True) 
+            self.bw_limit = ToggleSetting(False)        
+            self.inverted = ToggleSetting(False)
             
             # Menus associated with each channel
             CouplingMenu = ToggleMenu("Coupling")
@@ -1163,10 +1166,28 @@ class Channel:
             DCCoupling.select = self.set_dc_coupling
             CouplingMenu.set_options(ACCoupling, DCCoupling, self.ac_coupling)
             
-            ImpedanceMenu = MenuItem("Input Z")
-            BWLimitMenu = MenuItem("BW Limit")
-            InvertMenu = MenuItem("Invert")
-            ProbeSettingsMenu = MenuItem("Probe settings")
+            ImpedanceMenu = ToggleMenu("Input Z")
+            OneMeg = MenuItem("1 MOhm")
+            OneMeg.select = self.set_impedance_high
+            Fifty = MenuItem("50 Ohm")
+            Fifty.select = self.set_impedance_low
+            ImpedanceMenu.set_options(OneMeg, Fifty, self.high_input_imped)
+            
+            BWLimitMenu = ToggleMenu("Bandwidth Limit")
+            BWLimitOn = MenuItem("On")
+            BWLimitOn.select = self.set_bw_limit
+            BWLimitOff = MenuItem("Off")
+            BWLimitOff.select = self.unset_bw_limit
+            BWLimitMenu = set_options(BWLimitOn, BWLimitOff, self.bw_limit)
+            
+            InvertMenu = ToggleMenu("Invert")
+            InvertOn = MenuItem("On")
+            InvertOn.select = self.set_invert
+            InvertOff = MenuItem("Off")
+            InvertOff.select = self.unset_invert
+            InvertMenu = set_options(InvertOn, InvertOff, self.inverted)
+            
+            ProbeSettingsMenu = MenuItem("Probe settings") #implement
             
             ChannelMenuItems = [CouplingMenu, ImpedanceMenu, BWLimitMenu, InvertMenu, ProbeSettingsMenu]
             
@@ -1194,6 +1215,7 @@ class Channel:
                 self.enabled.value = False
             elif (reply[0:1] == b'1'):
                 self.enabled.value = True
+            
             
             cmd = b'CHAN'  + str(self.number).encode() + b':SCAL?\r\n'
             Sock.sendall(cmd)
@@ -1236,6 +1258,7 @@ class Channel:
             
             self.offset = base * 10 ** exp
             
+            
             cmd = b'CHAN'  + str(self.number).encode() + b':COUP?\r\n'
             Sock.sendall(cmd)
             sleep(CMD_WAIT)
@@ -1251,6 +1274,57 @@ class Channel:
                 self.ac_coupling.value = False
             elif (reply[0:1] == b'A'):
                 self.ac_coupling.value = True
+                
+                
+            cmd = b'CHAN'  + str(self.number).encode() + b':IMP?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            if (reply[0:1] == b'O'):
+                self.high_input_imped.value = True
+            elif (reply[0:1] == b'F'):
+                self.high_input_imped.value = False
+            
+            
+            cmd = b'CHAN'  + str(self.number).encode() + b':BWL?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            if (reply[0:1] == b'1'):
+                self.bw_limit.value = True
+            elif (reply[0:1] == b'0'):
+                self.bw_limit.value = False
+            
+            
+            cmd = b'CHAN'  + str(self.number).encode() + b':INV?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            if (reply[0:1] == b'1'):
+                self.inverted.value = True
+            elif (reply[0:1] == b'0'):
+                self.inverted.value = False
                 
         
     def enable(self):
@@ -1357,8 +1431,50 @@ class Channel:
                 Sock.sendall(cmd)
                 self.ac_coupling.value = False
 
-
-class Timebase:
+    def set_impedance_high(self):
+        if (not SCOPELESS and self.enabled.value):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                cmd = b'CHAN' + str(self.number).encode() + b':IMP ONEM\r\n'
+                Sock.sendall(cmd)
+                self.high_input_imped.value = True
+    
+    def set_impedance_low(self):
+        if (not SCOPELESS and self.enabled.value):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                cmd = b'CHAN' + str(self.number).encode() + b':IMP FIFT\r\n'
+                Sock.sendall(cmd)
+                self.high_input_imped.value = False
+                
+    def set_bw_limit(self):
+        if (not SCOPELESS and self.enabled.value):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                cmd = b'CHAN' + str(self.number).encode() + b':BWL 1\r\n'
+                Sock.sendall(cmd)
+                self.bw_limit.value = True
+    
+    def unset_bw_limit(self):
+        if (not SCOPELESS and self.enabled.value):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                cmd = b'CHAN' + str(self.number).encode() + b':BWL 0\r\n'
+                Sock.sendall(cmd)
+                self.bw_limit.value = False
+                
+    def set_invert(self):
+        if (not SCOPELESS and self.enabled.value):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                cmd = b'CHAN' + str(self.number).encode() + b':INV 1\r\n'
+                Sock.sendall(cmd)
+                self.inverted.value = True
+    
+    def unset_invert(self):
+        if (not SCOPELESS and self.enabled.value):
+            if (not (Scope.Timebase.mode[0:1] == b'X' and (self.number == 3 or self.number == 4))): # only channels 1/2 active in XY mode
+                cmd = b'CHAN' + str(self.number).encode() + b':INV 0\r\n'
+                Sock.sendall(cmd)
+                self.inverted.value = False
+    
+    
+class Timebase: 
     mode = b'MAIN'
     reference = b'CENT'
     scale_base_b = b'+5'
@@ -1586,6 +1702,119 @@ class Timebase:
             Sock.sendall(cmd)
             sleep(CMD_WAIT)
 
+
+class Trigger:
+    
+    sweep = b'AUTO'
+    mode = b'EDGE'
+    #holdoff = 0
+    
+    def __init__(self):
+        self.HFReject = ToggleSetting(False)
+        self.NReject = ToggleSetting(False)
+        
+        #menus
+        
+        
+    def get_state(self):
+        if (not SCOPELESS):
+            cmd = b':TRIG:HFR?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            if (reply[0:1] == b'0'):
+                self.HFReject.value = False
+            elif (reply[0:1] == b'1'):
+                self.HFReject.value = True
+                
+                
+            cmd = b':TRIG:NREJ?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            if (reply[0:1] == b'0'):
+                self.NReject.value = False
+            elif (reply[0:1] == b'1'):
+                self.NReject.value = True
+                
+            
+            cmd = b':TRIG:MODE?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            self.mode = reply
+            
+            
+            cmd = b':TRIG:SWE?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            self.sweep = reply
+            
+    def enable_HFRej(self):
+        if (not SCOPELESS):
+            self.HFReject.value = True
+            cmd = b':TRIG:HFR 1\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+    def disable_HFRej(self):
+        if (not SCOPELESS):
+            self.HFReject.value = False
+            cmd = b':TRIG:HFR 0\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+    def enable_NRej(self):
+        if (not SCOPELESS):
+            self.NReject.value = True
+            cmd = b':TRIG:NREJ 1\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+    def disable_NRej(self):
+        if (not SCOPELESS):
+            self.NReject.value = False
+            cmd = b':TRIG:NREJ 0\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+    def set_mode_edge(self):
+        if (not SCOPELESS):
+            self.mode = b'EDGE'
+            cmd = b':TRIG:MODE ' + self.mode + b'\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+        
+            
 
 class Encoder:
     a = 0

@@ -449,7 +449,11 @@ def button_press(row, col):
             pass 
     elif (row & R3):
         if   (col & C1): # trigger 
-            pass
+            ActiveMenu.disable()
+            ActiveMenu = Scope.Trigger.Menu
+            update_select_funcs()
+            ActiveMenu.enable()
+            ActiveMenu.display_menu()
         elif (col & C2): # trigger level knob
             cmd = b':TRIG:LFIF\r\n'
             Sock.sendall(cmd)
@@ -676,7 +680,8 @@ else:
             Sock.connect((remote_ip , port))
             break
         
-        except OSError:
+        except OSError as e:
+            print(e)
             print("Unable to connect, trying again in 30s")
             
             lcd.clear()
@@ -1703,7 +1708,7 @@ class Timebase:
             sleep(CMD_WAIT)
 
 
-class Trigger:
+class Trigger: #holdoff
     
     sweep = b'AUTO'
     mode = b'EDGE'
@@ -1712,9 +1717,39 @@ class Trigger:
     def __init__(self):
         self.HFReject = ToggleSetting(False)
         self.NReject = ToggleSetting(False)
+        self.SweepIsAuto = ToggleSetting(True)
         
-        #menus
         
+        # Menus
+        EdgeType = MenuItem("Set type: edge") # more trigger types available but only implementing this one
+        EdgeType.select = self.set_mode_edge
+        
+        HFRejectMenu = ToggleMenu("HF Reject (50 kHz)")
+        HFRejectOn = MenuItem("On")
+        HFRejectOn.select = self.enable_HFRej
+        HFRejectOff = MenuItem("Off")
+        HFRejectOff.select = self.disable_HFRej
+        HFRejectMenu.set_options(HFRejectOn, HFRejectOff, self.HFReject)
+        
+        NRejectMenu = ToggleMenu("Noise Reject")
+        NRejectOn = MenuItem("On")
+        NRejectOn.select = self.enable_NRej
+        NRejectOff = MenuItem("Off")
+        NRejectOff.select = self.disable_NRej
+        NRejectMenu.set_options(NRejectOn, NRejectOff, self.NReject)
+        
+        SweepMenu = ToggleMenu("Sweep")
+        SweepAuto = MenuItem("Auto")
+        SweepAuto.select = self.set_sweep_auto
+        SweepNormal = MenuItem("Normal")
+        SweepNormal.select = self.set_sweep_normal
+        SweepMenu.set_options(SweepAuto, SweepNormal, self.SweepIsAuto)
+        
+        TriggerMenuItems = [EdgeType, SweepMenu, HFRejectMenu, NRejectMenu]
+        
+        self.Menu = ListMenu()
+        self.Menu.set_menu(TriggerMenuItems)
+        Menu.container = BlankMenu()
         
     def get_state(self):
         if (not SCOPELESS):
@@ -1811,6 +1846,22 @@ class Trigger:
         if (not SCOPELESS):
             self.mode = b'EDGE'
             cmd = b':TRIG:MODE ' + self.mode + b'\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+    def set_sweep_auto(self):
+        if (not SCOPELESS):
+            self.SweepIsAuto.value = True
+            self.sweep = b'AUTO'
+            cmd = b':TRIG:SWE ' + self.sweep + b'\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+    def set_sweep_normal(self):
+        if (not SCOPELESS):
+            self.SweepIsAuto.value = False
+            self.sweep = b'NORM'
+            cmd = b':TRIG:SWE ' + self.sweep + b'\r\n'
             Sock.sendall(cmd)
             sleep(CMD_WAIT)
         

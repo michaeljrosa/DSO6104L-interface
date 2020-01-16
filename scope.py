@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
+from os import execv
+from sys import argv
+from sys import exit  
+from sys import maxsize
 
 import socket
 from subprocess import check_call
-from sys import exit  
-from sys import maxsize
 from time import sleep
 from math import floor
 import struct
@@ -768,6 +770,7 @@ def main():
                     
                     button_press(button_io[0], ~drive_col)
                     
+                    
             spi.close()
             
             if (interrupt5.value):
@@ -793,9 +796,8 @@ def main():
         disable_power()
         disable_backlight()
         GPIO.cleanup()
-        check_call(['./scope.py'])
-        exit()
-  
+        execv(__file__, argv)
+        
         
 class ToggleSetting:
     def __init__(self, bool_value):

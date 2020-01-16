@@ -142,7 +142,10 @@ def shutdown():
 def disable_backlight():
     bklt_en.off()
     print("backlight disabled")
-    #write message to scope
+    cmd = b'SYST:DSP "An LCD backlight power fault has occurred"\r\n'
+    Sock.sendall(cmd)
+    sleep(CMD_WAIT)
+    
     
 def pwm_backlight(f):
     if (bklt_fault.value == False):
@@ -155,7 +158,9 @@ def pwm_backlight(f):
 def disable_power():
     pwr_en.off()
     print("power disabled")
-    #write message to scope
+    cmd = b'SYST:DSP "A fatal power fault has occurred"\r\n'
+    Sock.sendall(cmd)
+    sleep(CMD_WAIT)
     
 def enable_power():
     if (pwr_fault.value == False):
@@ -1030,10 +1035,14 @@ class ListMenu(Menu):
     start_index = 0
     max_index = -1
     is_active = False
+    text = ""
     
     def __init__(self):
         super().__init__()
         self.menu_items = []
+    
+    def set_text(self, text):
+        self.text = text
     
     def set_menu(self, menu_items):
         self.menu_items = menu_items
@@ -1721,17 +1730,69 @@ class Trigger: #holdoff
         self.NReject = ToggleSetting(False)
         self.SweepIsAuto = ToggleSetting(True)
         
+        # Most of these menus depend upon using 'edge' type triggering
+        # There are many other trigger types available but this was most important
         
-        # Menus
-        EdgeType = MenuItem("Set type: edge") # more trigger types available but only implementing this one
-        EdgeType.select = self.set_mode_edge
+        ACCoupling = MenuItem("AC")
+        ACCoupling.select = self.set_edge_coupling_ac
+        DCCoupling = MenuItem("DC")
+        DCCoupling.select = self.set_edge_coupling_dc
+        LFCoupling = MenuItem("LF reject (50kHz)")
+        LFCoupling.select = self.set_edge_coupling_lf
+        CouplingMenuItems = [ACCoupling, DCCoupling, LFCoupling]
+        CouplingMenu = ListMenu()
+        CouplingMenu.set_menu(CouplingMenuItems)
+        CouplingMenu.set_text("Coupling")
         
+        RejectOff = MenuItem("Off")
+        RejectOff.select = self.set_reject_off
+        RejectLF = MenuItem("Low freq (50kHz)")
+        RejectLF.select = self.set_reject_lf
+        RejectHF = MenuItem("High freq (50kHz)")
+        RejectHF.select = self.set_reject_hf
+        RejectMenuItems = [RejectOff, RejectLF, RejectHF]
+        RejectMenu = ListMenu()
+        RejectMenu.set_menu(RejectMenuItems)
+        RejectMenu.set_text("Reject")
+        
+        SlopePositive = MenuItem("Positive")
+        SlopePositive.select = self.set_slope_positive
+        SlopeNegative = MenuItem("Negative")
+        SlopeNegative.select = self.set_slope_negative
+        SlopeEither = MenuItem("Either")
+        SlopeEither.select = self.set_slope_either
+        SlopeAlternate = MenuItem("Alternate")
+        SlopeAlternate.select = self.set_slope_alternate
+        SlopeMenuItems = [SlopePositive, SlopeNegative, SlopeEither, SlopeAlternate]
+        SlopeMenu = ListMenu()
+        SlopeMenu.set_menu(SlopeMenuItems)
+        SlopeMenu.set_text("Slope")
+        
+        SourceCh1 = MenuItem("Channel 1")
+        SourceCh1.select = self.set_source_ch1
+        SourceCh2 = MenuItem("Channel 2")
+        SourceCh2.select = self.set_source_ch2
+        SourceCh3 = MenuItem("Channel 3")
+        SourceCh3.select = self.set_source_ch3
+        SourceCh4 = MenuItem("Channel 4")
+        SourceCh4.select = self.set_source_ch4
+        SourceExternal = MenuItem("External")
+        SourceExternal.select = self.set_source_external
+        SourceLine = MenuItem("Line")
+        SourceLine.select = self.set_source_line
+        SourceMenuItems = [SourceCh1, SourceCh2, SourceCh3, SourceCh4, SourceExternal, SourceLine]
+        SourceMenu = ListMenu()
+        SourceMenu.set_menu(SourceMenuItems)
+        SourceMenu.set_text("Source")
+        
+        """
         HFRejectMenu = ToggleMenu("HF Reject (50 kHz)")
         HFRejectOn = MenuItem("On")
         HFRejectOn.select = self.enable_HFRej
         HFRejectOff = MenuItem("Off")
         HFRejectOff.select = self.disable_HFRej
         HFRejectMenu.set_options(HFRejectOn, HFRejectOff, self.HFReject)
+        """
         
         NRejectMenu = ToggleMenu("Noise Reject")
         NRejectOn = MenuItem("On")
@@ -1747,7 +1808,7 @@ class Trigger: #holdoff
         SweepNormal.select = self.set_sweep_normal
         SweepMenu.set_options(SweepAuto, SweepNormal, self.SweepIsAuto)
         
-        TriggerMenuItems = [EdgeType, SweepMenu, HFRejectMenu, NRejectMenu]
+        TriggerMenuItems = [SweepMenu, CouplingMenu, RejectMenu, NRejectMenu, SlopeMenu, SourceMenu]
         
         self.Menu = ListMenu()
         self.Menu.set_menu(TriggerMenuItems)
@@ -1816,58 +1877,132 @@ class Trigger: #holdoff
             
             self.sweep = reply
             
+    """
     def enable_HFRej(self):
-        if (not SCOPELESS):
-            self.HFReject.value = True
-            cmd = b':TRIG:HFR 1\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
+        self.HFReject.value = True
+        cmd = b':TRIG:HFR 1\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
             
     def disable_HFRej(self):
-        if (not SCOPELESS):
-            self.HFReject.value = False
-            cmd = b':TRIG:HFR 0\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
+        self.HFReject.value = False
+        cmd = b':TRIG:HFR 0\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+    """
             
     def enable_NRej(self):
-        if (not SCOPELESS):
-            self.NReject.value = True
-            cmd = b':TRIG:NREJ 1\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
+        self.NReject.value = True
+        cmd = b':TRIG:NREJ 1\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
             
     def disable_NRej(self):
-        if (not SCOPELESS):
-            self.NReject.value = False
-            cmd = b':TRIG:NREJ 0\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
+        self.NReject.value = False
+        cmd = b':TRIG:NREJ 0\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
             
     def set_mode_edge(self):
-        if (not SCOPELESS):
-            self.mode = b'EDGE'
-            cmd = b':TRIG:MODE ' + self.mode + b'\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
+        self.mode = b'EDGE'
+        cmd = b':TRIG:MODE ' + self.mode + b'\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
             
     def set_sweep_auto(self):
-        if (not SCOPELESS):
-            self.SweepIsAuto.value = True
-            self.sweep = b'AUTO'
-            cmd = b':TRIG:SWE ' + self.sweep + b'\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
+        self.SweepIsAuto.value = True
+        self.sweep = b'AUTO'
+        cmd = b':TRIG:SWE ' + self.sweep + b'\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
             
     def set_sweep_normal(self):
-        if (not SCOPELESS):
-            self.SweepIsAuto.value = False
-            self.sweep = b'NORM'
-            cmd = b':TRIG:SWE ' + self.sweep + b'\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
+        self.SweepIsAuto.value = False
+        self.sweep = b'NORM'
+        cmd = b':TRIG:SWE ' + self.sweep + b'\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
         
+    def set_edge_coupling_ac(self):
+        cmd = b':TRIG:EDGE:COUP AC\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+    
+    def set_edge_coupling_dc(self):
+        cmd = b':TRIG:EDGE:COUP DC\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_edge_coupling_lf(self):
+        cmd = b':TRIG:EDGE:COUP LFR\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+    
+    def set_reject_off(self):
+        cmd = b':TRIG:EDGE:REJ OFF\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_reject_lf(self):
+        cmd = b':TRIG:EDGE:REJ LFR\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_reject_hf(self):
+        cmd = b':TRIG:EDGE:REJ HFR\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
             
+    def set_slope_positive(self):
+        cmd = b':TRIG:EDGE:SLOP POS\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_slope_negative(self):
+        cmd = b':TRIG:EDGE:SLOP NEG\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_slope_either(self):
+        cmd = b':TRIG:EDGE:SLOP EITH\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_slope_alternate(self):
+        cmd = b':TRIG:EDGE:SLOP ALT\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_source_ch1(self):
+        cmd = b':TRIG:EDGE:SOUR CHAN1\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_source_ch2(self):
+        cmd = b':TRIG:EDGE:SOUR CHAN2\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_source_ch3(self):
+        cmd = b':TRIG:EDGE:SOUR CHAN3\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_source_ch4(self):
+        cmd = b':TRIG:EDGE:SOUR CHAN4\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_source_external(self):
+        cmd = b':TRIG:EDGE:SOUR EXT\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_source_line(self):
+        cmd = b':TRIG:EDGE:SOUR LINE\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+
 
 class Encoder:
     a = 0

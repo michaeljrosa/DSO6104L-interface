@@ -142,9 +142,10 @@ def shutdown():
 def disable_backlight():
     bklt_en.off()
     print("backlight disabled")
-    cmd = b'SYST:DSP "An LCD backlight power fault has occurred"\r\n'
-    Sock.sendall(cmd)
-    sleep(CMD_WAIT)
+    if(bklt_fault.value == True):
+        cmd = b'SYST:DSP "An LCD backlight power fault has occurred"\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
     
     
 def pwm_backlight(f):
@@ -158,9 +159,11 @@ def pwm_backlight(f):
 def disable_power():
     pwr_en.off()
     print("power disabled")
-    cmd = b'SYST:DSP "A fatal power fault has occurred"\r\n'
-    Sock.sendall(cmd)
-    sleep(CMD_WAIT)
+    
+    if(pwr_fault.value == True):
+        cmd = b'SYST:DSP "A fatal power fault has occurred"\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
     
 def enable_power():
     if (pwr_fault.value == False):
@@ -365,6 +368,9 @@ def init_encoders():
     Cursor = Encoder(A_CURS, B_CURS)
     
     Trigger = Encoder(A_TRIG, B_TRIG)
+    Trigger.enabled = True
+    Trigger.cw_action = Scope.Trigger.cw_level
+    Trigger.ccw_action = Scope.Trigger.ccw_level
     
     bank1B = [MathScale, MathOffset, Cursor, Trigger]
     EncoderBank1B.encoders = bank1B
@@ -462,6 +468,7 @@ def button_press(row, col):
             ActiveMenu.enable()
             ActiveMenu.display_menu()
         elif (col & C2): # trigger level knob
+            Scope.Trigger.level = 0
             cmd = b':TRIG:LFIF\r\n'
             Sock.sendall(cmd)
             sleep(CMD_WAIT)
@@ -793,13 +800,13 @@ def main():
         
     except Exception as e:
         print(e)
-        Sock.close()
         ActiveMenu.disable()
         lcd.clear()
         lcd.write_string("An unexpected error\r\noccurred.\r\n\nRestarting...")
         sleep(3)
         disable_power()
         disable_backlight()
+        Sock.close()
         GPIO.cleanup()
         execv(__file__, argv)
         
@@ -1131,15 +1138,17 @@ class ListMenu(Menu):
 
 
 class Scope:
+    
     def __init__(self):
+        self.Trigger = Trigger(self)
+        self.Timebase = Timebase()
+        
         self.Channel1 = Channel(1)
         self.Channel2 = Channel(2)
         self.Channel3 = Channel(3)
         self.Channel4 = Channel(4)
         self.channels = [self.Channel1, self.Channel2, self.Channel3, self.Channel4]
         
-        self.Timebase = Timebase()
-        self.Trigger = Trigger()
         
         self.get_state()
     
@@ -1150,6 +1159,8 @@ class Scope:
                 
             self.Timebase.get_state()
             self.Trigger.get_state()
+            
+        
 
 
 class Channel: # probe attenuation
@@ -1160,6 +1171,7 @@ class Channel: # probe attenuation
     scale_exp_b = b'+0'
     scale_exp = 0
     scale = 5
+    channel_range = 40
     offset = 0
     offset_b = b'+0E+0'
     
@@ -1252,6 +1264,7 @@ class Channel: # probe attenuation
             self.scale_exp = ascii_to_num(self.scale_exp_b)
             
             self.scale = self.scale_base * 10 ** self.scale_exp
+            self.channel_range = self.scale * 8
             
             
             cmd = b'CHAN'  + str(self.number).encode() + b':OFFS?\r\n'
@@ -1384,6 +1397,7 @@ class Channel: # probe attenuation
                     
                 #update state
                 self.scale = self.scale_base * 10 ** self.scale_exp
+                self.channel_range = self.scale * 8
                 self.scale_base_b = num_to_ascii(self.scale_base, False)
                 self.scale_exp_b = num_to_ascii(self.scale_exp, True)
                 
@@ -1409,6 +1423,7 @@ class Channel: # probe attenuation
                 
                 #update state
                 self.scale = self.scale_base * 10 ** self.scale_exp
+                self.channel_range = self.scale * 8
                 self.scale_base_b = num_to_ascii(self.scale_base, False)
                 self.scale_exp_b = num_to_ascii(self.scale_exp, True)
                 
@@ -1723,9 +1738,14 @@ class Trigger: #holdoff
     
     sweep = b'AUTO'
     mode = b'EDGE'
+    source = b'CHAN1'
+    source_range = 40
+    level = 0
     #holdoff = 0
     
-    def __init__(self):
+    def __init__(self, Scope):
+        self.Scope = Scope
+        
         self.HFReject = ToggleSetting(False)
         self.NReject = ToggleSetting(False)
         self.SweepIsAuto = ToggleSetting(True)
@@ -1816,6 +1836,7 @@ class Trigger: #holdoff
         
     def get_state(self):
         if (not SCOPELESS):
+            """
             cmd = b':TRIG:HFR?\r\n'
             Sock.sendall(cmd)
             sleep(CMD_WAIT)
@@ -1831,6 +1852,7 @@ class Trigger: #holdoff
                 self.HFReject.value = False
             elif (reply[0:1] == b'1'):
                 self.HFReject.value = True
+            """
                 
                 
             cmd = b':TRIG:NREJ?\r\n'
@@ -1877,6 +1899,118 @@ class Trigger: #holdoff
             
             self.sweep = reply
             
+            
+            cmd = b':TRIG:EDGE:SOUR?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            self.source = reply
+            
+            self.get_source_range()
+            
+            
+            cmd = b'TRIG:EDGE:LEV?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            self.offset_b = reply
+            
+            base_end = reply.index(b'E')
+            base = reply[:base_end]
+            exp = reply[base_end+1:]
+            base = ascii_to_num(base)
+            exp = ascii_to_num(exp)
+            
+            self.level = base * 10 ** exp
+            
+            
+            
+    def get_source_range(self):
+        if (self.source[4:5] == b'1'):
+            self.source_range = self.Scope.Channel1.channel_range
+        if (self.source[4:5] == b'2'):
+            self.source_range = self.Scope.Channel2.channel_range
+        if (self.source[4:5] == b'3'):
+            self.source_range = self.Scope.Channel3.channel_range
+        if (self.source[4:5] == b'4'):
+            self.source_range = self.Scope.Channel4.channel_range
+        elif (self.source[0:1] == b'E'):
+            cmd = self.source + b':RANG?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            num_end = reply.index(b'E')
+            range_base_b = reply[:num_end]
+            range_exp_b = reply[num_end+1:]
+            
+            range_base = ascii_to_num(range_base_b)
+            range_exp = ascii_to_num(range_exp_b)
+            
+            self.source_range = range_base * 10 ** range_exp
+            
+    def cw_level(self):
+        if (self.source[0:1] == b'C' or self.source[0:1] == b'E'):
+            self.get_source_range()
+
+            step = 0.01 * self.source_range
+            self.level += step
+                
+            if (self.source[0:1] == b'C'):
+                if(self.level > self.source_range * 0.75):
+                    self.level = self.source_range * 0.75
+                    
+                cmd = b'TRIG:EDGE:LEV ' + "{:.6E}".format(self.level).encode() + b'V\r\n'
+                Sock.sendall(cmd)
+                
+            elif (self.source[0:1] == b'E'):
+                if (self.level > self.source_range * 1):
+                    self.level = self.source_range * 1
+                cmd = b'TRIG:EDGE:LEV ' + "{:.6E}".format(self.level).encode() + b'V\r\n'
+                Sock.sendall(cmd)
+                   
+    def ccw_level(self):
+        if (self.source[0:1] == b'C' or self.source[0:1] == b'E'):
+            self.get_source_range()
+            
+            step = 0.01 * self.source_range
+            self.level -= step
+                
+            if (self.source[0:1] == b'C'):
+                if(self.level < self.source_range * -0.75):
+                    self.level = self.source_range * -0.75
+                cmd = b'TRIG:EDGE:LEV ' + "{:.6E}".format(self.level).encode() + b'V\r\n'
+                Sock.sendall(cmd)
+                
+            elif (self.source[0:1] == b'E'):
+                if (self.level < self.source_range * -1):
+                    self.level = self.source_range * -1
+                cmd = b'TRIG:EDGE:LEV ' + "{:.6E}".format(self.level).encode() + b'V\r\n'
+                Sock.sendall(cmd)
+                
+                
+    
+            
+            
     """
     def enable_HFRej(self):
         self.HFReject.value = True
@@ -1902,12 +2036,14 @@ class Trigger: #holdoff
         cmd = b':TRIG:NREJ 0\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
-            
+         
+    """
     def set_mode_edge(self):
         self.mode = b'EDGE'
         cmd = b':TRIG:MODE ' + self.mode + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
+    """
             
     def set_sweep_auto(self):
         self.SweepIsAuto.value = True
@@ -1974,32 +2110,44 @@ class Trigger: #holdoff
         sleep(CMD_WAIT)
         
     def set_source_ch1(self):
-        cmd = b':TRIG:EDGE:SOUR CHAN1\r\n'
+        self.source = b'CHAN1'
+        self.level = 0
+        cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
+        self.get_source_range()
         
     def set_source_ch2(self):
-        cmd = b':TRIG:EDGE:SOUR CHAN2\r\n'
+        self.source = b'CHAN2'
+        self.level = 0
+        cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
         
     def set_source_ch3(self):
-        cmd = b':TRIG:EDGE:SOUR CHAN3\r\n'
+        self.source = b'CHAN3'
+        self.level = 0
+        cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
         
     def set_source_ch4(self):
-        cmd = b':TRIG:EDGE:SOUR CHAN4\r\n'
+        self.source = b'CHAN4'
+        self.level = 0
+        cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
         
     def set_source_external(self):
-        cmd = b':TRIG:EDGE:SOUR EXT\r\n'
+        self.source = b'EXT'
+        self.level = 0
+        cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
         
     def set_source_line(self):
-        cmd = b':TRIG:EDGE:SOUR LINE\r\n'
+        self.source = b'LINE'
+        cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
 

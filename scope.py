@@ -2151,6 +2151,70 @@ class Trigger: #holdoff, external probe
         sleep(CMD_WAIT)
 
 
+class Cursor: #mode, x1pos, x1y1 source, x2pos, x2y2source, y1pos, y2pos
+    mode = b'OFF'
+    
+ 
+    def __init__(self):
+    
+        # menus
+        ModeOff = MenuItem("Off")
+        ModeOff.select = self.set_mode_off
+        ModeManual = MenuItem("Manual")
+        ModeManual.select = self.set_mode_manual
+        ModeMeasure = MenuItem("Measurement")
+        ModeMeasure.select = self.set_mode_measurement
+        ModeWaveform = MenuItem("Waveform")
+        ModeWaveform.select = self.set_mode_waveform
+        ModeMenuItems = [ModeOff, ModeManual, ModeMeasure, ModeWaveform]
+        ModeMenu = ListMenu()
+        ModeMenu.set_menu(ModeMenuItems)
+        
+        CursorMenuItems = [ModeMenu]
+        
+        self.Menu = ListMenu()
+        self.Menu.set_menu(CursorMenuItems)
+        self.Menu.container = BlankMenu()
+        
+    def get_state(self):
+        if (not SCOPELESS):
+            cmd = b'MARK:MODE?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+            
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            self.mode = reply
+    
+    def set_mode_off(self):
+        self.mode = b'OFF'
+        cmd = b'MARK:MODE ' + self.mode + b'\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+    
+    def set_mode_manual(self):
+        self.mode = b'MAN'
+        cmd = b'MARK:MODE ' + self.mode + b'\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+    
+    def set_mode_measurement(self):
+        self.mode = b'MEAS'
+        cmd = b'MARK:MODE ' + self.mode + b'\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+    
+    def set_mode_waveform(self):
+        self.mode = b'WAV'
+        cmd = b'MARK:MODE ' + self.mode + b'\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
 
 class Encoder:
     a = 0

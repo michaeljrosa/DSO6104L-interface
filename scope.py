@@ -147,7 +147,6 @@ def disable_backlight():
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
     
-    
 def pwm_backlight(f):
     if (bklt_fault.value == False):
         bklt_en.on()
@@ -687,9 +686,9 @@ else:
             print("Attempting to connect")
             
             lcd.clear()
-            lcd.write_string("Trying to connect...")
+            lcd.write_string("Trying to connect...\r\n")
             lcd.write_string("IP: " + remote_ip + '\r\n')
-            lcd.write_string("Port: " + str(port) + '\n')
+            lcd.write_string("Port: " + str(port) + '\r\n')
             
             Sock.connect((remote_ip , port))
             break
@@ -1163,7 +1162,7 @@ class Scope:
         
 
 
-class Channel: # probe attenuation
+class Channel: # probe attenuation, vernier, units
     
     probe_aten = 0                     #implement
     scale_base_b = b'+5'
@@ -1505,7 +1504,7 @@ class Channel: # probe attenuation
                 self.inverted.value = False
     
     
-class Timebase: 
+class Timebase: #vernier
     mode = b'MAIN'
     reference = b'CENT'
     scale_base_b = b'+5'
@@ -1734,7 +1733,7 @@ class Timebase:
             sleep(CMD_WAIT)
 
 
-class Trigger: #holdoff
+class Trigger: #holdoff, external probe
     
     sweep = b'AUTO'
     mode = b'EDGE'
@@ -2150,6 +2149,7 @@ class Trigger: #holdoff
         cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
+
 
 
 class Encoder:

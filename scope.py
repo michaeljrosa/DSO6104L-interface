@@ -426,9 +426,12 @@ def button_press(row, col):
                 cmd = b'RUN\r\n'
                 Sock.sendall(cmd)
             
+            sleep(CMD_WAIT)
+            
         elif (col & C6): # single
             cmd = b':SINGLE\r\n'
             Sock.sendall(cmd)
+            sleep(CMD_WAIT)
             
     elif (row & R2):
         if   (col & C1): # horizontal scale knob
@@ -461,11 +464,15 @@ def button_press(row, col):
             pass 
     elif (row & R3):
         if   (col & C1): # trigger 
-            ActiveMenu.disable()
-            ActiveMenu = Scope.Trigger.Menu
-            update_select_funcs()
-            ActiveMenu.enable()
-            ActiveMenu.display_menu()
+            if (not Scope.Trigger.Menu.is_active):
+                ActiveMenu.disable()
+                ActiveMenu = Scope.Trigger.Menu
+                update_select_funcs()
+                ActiveMenu.enable()
+                ActiveMenu.display_menu()
+            elif  (Scope.Trigger.Menu.is_active):
+                ActiveMenu.disable()
+                
         elif (col & C2): # trigger level knob
             Scope.Trigger.level = 0
             cmd = b':TRIG:LFIF\r\n'
@@ -475,7 +482,15 @@ def button_press(row, col):
         elif (col & C3): # measure
             pass
         elif (col & C4): # cursors
-            pass
+            if (not Scope.Cursor.Menu.is_active):
+                ActiveMenu.disable()
+                ActiveMenu = Scope.Cursor.Menu
+                update_select_funcs()
+                ActiveMenu.enable()
+                ActiveMenu.display_menu()
+            elif  (Scope.Cursor.Menu.is_active):
+                ActiveMenu.disable()
+        
         elif (col & C5): # cursors knob
             pass
         elif (col & C6): # math

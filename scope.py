@@ -1156,6 +1156,7 @@ class Scope:
     def __init__(self):
         self.Trigger = Trigger(self)
         self.Timebase = Timebase()
+        self.Cursor = Cursor()
         
         self.Channel1 = Channel(1)
         self.Channel2 = Channel(2)
@@ -1173,6 +1174,7 @@ class Scope:
                 
             self.Timebase.get_state()
             self.Trigger.get_state()
+            self.Cursor.get_state()
             
         
 

@@ -495,7 +495,7 @@ def button_press(row, col):
                 ActiveMenu.disable()
         
         elif (col & C5): # cursors knob
-            if (Scope.Cursor.mode[0:1] == b'O')
+            if (Scope.Cursor.mode[0:1] == b'O'):
                 Scope.Cursor.set_mode_manual()
                 
             if (not Scope.Cursor.ActiveCursorMenu.is_active):
@@ -507,7 +507,7 @@ def button_press(row, col):
             elif (Scope.Cursor.ActiveCursorMenu.is_active and Scope.Cursor.cursor_select):
                 ActiveMenu.select()
                 Scope.Cursor.cursor_select = False
-            elif (Scope.Cursor.ActiveCursorMenu.is_active and not Scope.Cursor.cursor__select):
+            elif (Scope.Cursor.ActiveCursorMenu.is_active and not Scope.Cursor.cursor_select):
                 Scope.Cursor.cursor_select = True
             
         elif (col & C6): # math
@@ -2253,8 +2253,10 @@ class Cursor:
         Source2Menu.set_menu(Source2MenuItems)
         Source2Menu.set_text("X2Y2 source")
         
+        Zero = MenuItem("Zero cursor")
+        Zero.select = self.zero_cursor
         
-        CursorMenuItems = [ModeMenu,]
+        CursorMenuItems = [ModeMenu, Zero, self.ActiveCursorMenu, Source1Menu, Source2Menu]
         
         self.Menu = ListMenu()
         self.Menu.set_menu(CursorMenuItems)
@@ -2274,11 +2276,26 @@ class Cursor:
             reply = reply[::-1]
             
             self.mode = reply
+            
+            self.get_cursor_pos()
+            self.get_cursor_source()
     
-    
-    def cw_cursor(self):
+    def zero_cursor(self):
         if (not (self.mode[0:1] == b'O')):
-            if (self.cursor_select):
+            suffix = b's'
+            
+            if (self.active_cursor[0:1] == b'Y'): #Y1, Y2
+                suffix = b'V'
+            
+            self.cursor_position = 0
+            
+            cmd = b'MARK:' + self.active_cursor + b'P ' + "{:.6E}".format(self.cursor_position).encode() + suffix + b'\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
+    
+    def cw_cursor(self): #update for math
+        if (not (self.mode[0:1] == b'O')):
+            if (self.cursor_select and self.ActiveCursorMenu.is_active):
                 ActiveMenu.increment_cursor()
             else:
                 suffix = b's'
@@ -2292,7 +2309,7 @@ class Cursor:
                         source = self.source1
                     else:
                         source = self.source2
-                    
+                        
                     if (source[0:1] == b'C'):
                         if (source[4:5] == b'1'):
                             scale = self.Scope.Channel1.scale
@@ -2313,9 +2330,9 @@ class Cursor:
                 Sock.sendall(cmd)
                 sleep(CMD_WAIT)
             
-    def ccw_cursor(self):
+    def ccw_cursor(self): #update for math
         if (not (self.mode[0:1] == b'O')):
-            if (self.cursor_select):
+            if (self.cursor_select and self.ActiveCursorMenu.is_active):
                 ActiveMenu.decrement_cursor()
             else:
                 suffix = b's'
@@ -2342,7 +2359,7 @@ class Cursor:
                     else:
                         # scale = self.Scope.Math.scale
                         pass
-                
+                        
                 step = 0.125 * scale
                 self.cursor_position -= step
                 
@@ -2353,6 +2370,7 @@ class Cursor:
     def get_cursor_pos(self):
         cmd = b'MARK:' + self.active_cursor + b'P?\r\n'
         Sock.sendall(cmd)
+        sleep(CMD_WAIT)
         
         if (not SCOPELESS):
             reply = get_reply()
@@ -2371,6 +2389,34 @@ class Cursor:
             
             self.cursor_position = pos_base * 10 ** pos_exp
         
+    def get_cursor_source(self):
+        cmd = b'MARK:X1Y1?\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+        if (not SCOPELESS):
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            self.source1 = reply
+            
+        cmd = b'MARK:X2Y2?\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+        if (not SCOPELESS):
+            reply = get_reply()
+            reply = reply[::-1]
+            reply = reply[4:]
+            start = reply.index(b'\n')
+            reply = reply[:start]
+            reply = reply[::-1]
+            
+            self.source2 = reply
     
     def set_mode_off(self):
         self.mode = b'OFF'
@@ -2384,7 +2430,8 @@ class Cursor:
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
         
-        get_cursor_pos()
+        self.get_cursor_pos()
+        self.get_cursor_source()
         
     def set_mode_measurement(self):
         self.mode = b'MEAS'
@@ -2392,7 +2439,8 @@ class Cursor:
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
                 
-        get_cursor_pos()
+        self.get_cursor_pos()
+        self.get_cursor_source()
     
     def set_mode_waveform(self):
         self.mode = b'WAV'
@@ -2400,23 +2448,24 @@ class Cursor:
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
         
-        get_cursor_pos()
+        self.get_cursor_pos()
+        self.get_cursor_source()
         
     def set_cursor_x1(self):
         self.active_cursor = b'X1'
-        get_cursor_pos()
+        self.get_cursor_pos()
         
     def set_cursor_y1(self):
         self.active_cursor = b'Y1'
-        get_cursor_pos()
+        self.get_cursor_pos()
         
     def set_cursor_x2(self):
         self.active_cursor = b'X2'
-        get_cursor_pos()
+        self.get_cursor_pos()
         
     def set_cursor_y2(self):
         self.active_cursor = b'Y2'
-        get_cursor_pos()
+        self.get_cursor_pos()
     
     def set_source1_ch1(self):
         if(self.Scope.Channel1.enabled.value):
@@ -2428,7 +2477,7 @@ class Cursor:
             if(not (self.mode[0:1] == b'W')):
                 self.mode = b'MAN'
                 
-            get_cursor_pos()
+            self.get_cursor_pos()
         
     def set_source1_ch2(self):
         if(self.Scope.Channel2.enabled.value):
@@ -2440,7 +2489,7 @@ class Cursor:
             if(not (self.mode[0:1] == b'W')):
                 self.mode = b'MAN'
                 
-            get_cursor_pos()
+            self.get_cursor_pos()
         
     def set_source1_ch3(self):
         if(self.Scope.Channel3.enabled.value):
@@ -2452,7 +2501,7 @@ class Cursor:
             if(not (self.mode[0:1] == b'W')):
                 self.mode = b'MAN'
                 
-            get_cursor_pos()
+            self.get_cursor_pos()
         
     def set_source1_ch4(self):
         if(self.Scope.Channel2.enabled.value):
@@ -2464,7 +2513,7 @@ class Cursor:
             if(not (self.mode[0:1] == b'W')):
                 self.mode = b'MAN'
                 
-            get_cursor_pos()
+            self.get_cursor_pos()
         
     def set_source1_func(self): # update this function once math implemented
         if(False):
@@ -2476,7 +2525,7 @@ class Cursor:
             if(not (self.mode[0:1] == b'W')):
                 self.mode = b'MAN'
                 
-            get_cursor_pos()
+            self.get_cursor_pos()
             
     def set_source2_ch1(self):
         if(self.Scope.Channel1.enabled.value):
@@ -2488,7 +2537,7 @@ class Cursor:
             if(not (self.mode[0:1] == b'W')):
                 self.mode = b'MAN'
                 
-            get_cursor_pos()
+            self.get_cursor_pos()
         
     def set_source2_ch2(self):
         if(self.Scope.Channel2.enabled.value):
@@ -2500,7 +2549,7 @@ class Cursor:
             if(not (self.mode[0:1] == b'W')):
                 self.mode = b'MAN'
                 
-            get_cursor_pos()
+            self.get_cursor_pos()
         
     def set_source2_ch3(self):
         if(self.Scope.Channel3.enabled.value):
@@ -2512,7 +2561,7 @@ class Cursor:
             if(not (self.mode[0:1] == b'W')):
                 self.mode = b'MAN'
                 
-            get_cursor_pos()
+            self.get_cursor_pos()
         
     def set_source2_ch4(self):
         if(self.Scope.Channel2.enabled.value):
@@ -2524,7 +2573,7 @@ class Cursor:
             if(not (self.mode[0:1] == b'W')):
                 self.mode = b'MAN'
                 
-            get_cursor_pos()
+            self.get_cursor_pos()
         
     def set_source2_func(self): # update this function once math implemented
         if(False):
@@ -2536,7 +2585,7 @@ class Cursor:
             if(not (self.mode[0:1] == b'W')):
                 self.mode = b'MAN'
                 
-            get_cursor_pos()
+            self.get_cursor_pos()
             
 
 class Encoder:

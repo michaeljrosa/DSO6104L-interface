@@ -1947,28 +1947,7 @@ class Trigger: #holdoff, external probe
             self.source = reply
             
             self.get_source_range()
-            
-            
-            cmd = b'TRIG:EDGE:LEV?\r\n'
-            Sock.sendall(cmd)
-            sleep(CMD_WAIT)
-            
-            reply = get_reply()
-            reply = reply[::-1]
-            reply = reply[4:]
-            start = reply.index(b'\n')
-            reply = reply[:start]
-            reply = reply[::-1]
-            self.offset_b = reply
-            
-            base_end = reply.index(b'E')
-            base = reply[:base_end]
-            exp = reply[base_end+1:]
-            base = ascii_to_num(base)
-            exp = ascii_to_num(exp)
-            
-            self.level = base * 10 ** exp
-            
+            self.get_level()
             
             
     def get_source_range(self):
@@ -1985,21 +1964,45 @@ class Trigger: #holdoff, external probe
             Sock.sendall(cmd)
             sleep(CMD_WAIT)
             
-            reply = get_reply()
-            reply = reply[::-1]
-            reply = reply[4:]
-            start = reply.index(b'\n')
-            reply = reply[:start]
-            reply = reply[::-1]
+            if (not SCOPELESS):
+                reply = get_reply()
+                reply = reply[::-1]
+                reply = reply[4:]
+                start = reply.index(b'\n')
+                reply = reply[:start]
+                reply = reply[::-1]
+                
+                num_end = reply.index(b'E')
+                range_base_b = reply[:num_end]
+                range_exp_b = reply[num_end+1:]
+                
+                range_base = ascii_to_num(range_base_b)
+                range_exp = ascii_to_num(range_exp_b)
+                
+                self.source_range = range_base * 10 ** range_exp
             
-            num_end = reply.index(b'E')
-            range_base_b = reply[:num_end]
-            range_exp_b = reply[num_end+1:]
+    def get_level(self):
+            cmd = b'TRIG:EDGE:LEV?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
             
-            range_base = ascii_to_num(range_base_b)
-            range_exp = ascii_to_num(range_exp_b)
-            
-            self.source_range = range_base * 10 ** range_exp
+            if (not SCOPELESS):
+                reply = get_reply()
+                reply = reply[::-1]
+                reply = reply[4:]
+                start = reply.index(b'\n')
+                reply = reply[:start]
+                reply = reply[::-1]
+                self.offset_b = reply
+                
+                base_end = reply.index(b'E')
+                base = reply[:base_end]
+                exp = reply[base_end+1:]
+                base = ascii_to_num(base)
+                exp = ascii_to_num(exp)
+                
+                self.level = base * 10 ** exp
+                
             
     def cw_level(self):
         if (self.source[0:1] == b'C' or self.source[0:1] == b'E'):
@@ -2144,45 +2147,50 @@ class Trigger: #holdoff, external probe
         
     def set_source_ch1(self):
         self.source = b'CHAN1'
-        self.level = 0
         cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
         self.get_source_range()
+        self.get_level()
         
     def set_source_ch2(self):
         self.source = b'CHAN2'
-        self.level = 0
         cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
+        self.get_source_range()
+        self.get_level()
         
     def set_source_ch3(self):
         self.source = b'CHAN3'
-        self.level = 0
         cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
+        self.get_source_range()
+        self.get_level()
         
     def set_source_ch4(self):
         self.source = b'CHAN4'
-        self.level = 0
         cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
+        self.get_source_range()
+        self.get_level()
         
     def set_source_external(self):
         self.source = b'EXT'
-        self.level = 0
         cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
+        self.get_source_range()
+        self.get_level()
         
     def set_source_line(self):
         self.source = b'LINE'
         cmd = b':TRIG:EDGE:SOUR ' + self.source + b'\r\n'
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
+        self.level = 0
 
 
 class Cursor: 
@@ -2368,26 +2376,27 @@ class Cursor:
                 sleep(CMD_WAIT)
             
     def get_cursor_pos(self):
-        cmd = b'MARK:' + self.active_cursor + b'P?\r\n'
-        Sock.sendall(cmd)
-        sleep(CMD_WAIT)
-        
-        if (not SCOPELESS):
-            reply = get_reply()
-            reply = reply[::-1]
-            reply = reply[4:]
-            start = reply.index(b'\n')
-            reply = reply[:start]
-            reply = reply[::-1]
+        if (not self.mode[0:1] == b'O'):
+            cmd = b'MARK:' + self.active_cursor + b'P?\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
             
-            num_end = reply.index(b'E')
-            pos_base_b = reply[:num_end]
-            pos_exp_b = reply[num_end+1:]
-            
-            pos_base = ascii_to_num(pos_base_b)
-            pos_exp = ascii_to_num(pos_exp_b)
-            
-            self.cursor_position = pos_base * 10 ** pos_exp
+            if (not SCOPELESS):
+                reply = get_reply()
+                reply = reply[::-1]
+                reply = reply[4:]
+                start = reply.index(b'\n')
+                reply = reply[:start]
+                reply = reply[::-1]
+                
+                num_end = reply.index(b'E')
+                pos_base_b = reply[:num_end]
+                pos_exp_b = reply[num_end+1:]
+                
+                pos_base = ascii_to_num(pos_base_b)
+                pos_exp = ascii_to_num(pos_exp_b)
+                
+                self.cursor_position = pos_base * 10 ** pos_exp
         
     def get_cursor_source(self):
         cmd = b'MARK:X1Y1?\r\n'

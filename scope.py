@@ -1172,9 +1172,12 @@ class Channel: # implement: probe attenuation, vernier, units
             InvertOff.select = self.unset_invert
             InvertMenu.set_options(InvertOn, InvertOff, self.inverted)
             
-            ProbeSettingsMenu = MenuItem("Probe settings") #implement
+            #ProbeSettingsMenu = MenuItem("Probe settings") #implement
             
-            ChannelMenuItems = [CouplingMenu, ImpedanceMenu, BWLimitMenu, InvertMenu] #, ProbeSettingsMenu]
+            ClearProtection = MenuItem("Clear protection")
+            ClearProtection.select = self.clear_protection
+            
+            ChannelMenuItems = [CouplingMenu, ImpedanceMenu, BWLimitMenu, InvertMenu, ClearProtection] #, ProbeSettingsMenu]
             
             self.Menu = ListMenu()
             self.Menu.set_menu(ChannelMenuItems)
@@ -1334,6 +1337,12 @@ class Channel: # implement: probe attenuation, vernier, units
                 cmd = b'CHAN' + str(self.number).encode() + b':OFFS +0E+0V\r\n'
                 Sock.sendall(cmd)
                 sleep(CMD_WAIT)
+                
+    def clear_protection(self):
+        if (self.enabled.value):
+            cmd = b'CHAN' + str(self.number).encode() + b':PROT:CLE\r\n'
+            Sock.sendall(cmd)
+            sleep(CMD_WAIT)
         
     def cw_scale(self):
         # deal with probe attenuation factor here

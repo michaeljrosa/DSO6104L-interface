@@ -21,6 +21,7 @@ from gpiozero import DigitalOutputDevice
 from gpiozero import PWMOutputDevice
 
 # for programming without the instrument connected
+# not extensively tested, mostly used when developing the menu system
 SCOPELESS = False 
 
 # LCD Characters
@@ -31,7 +32,7 @@ BLANK = 0x10
 OMEGA = 0xF4
 ACTIVE = 0x2A
 
-# Device register addresses
+# I/O expander device register addresses
 IOCON_INITIAL = 0x0A
 
 IODIRA   = 0x00
@@ -62,11 +63,12 @@ SPI_READ = 0x41
 SPI_MODE = 0b00
 SPI_RATE = 10000000   # hertz
 
-DEBOUNCE = 0.035  # seconds
-CMD_WAIT = 0.01
+DEBOUNCE = 0.035   # seconds
+CMD_WAIT = 0.01    # gives time for scope to update
 AUTOSCALE_WAIT = 1
 
 # SPI device 2, port A
+# button matrix columns
 C1 = 1<<5
 C2 = 1<<4
 C3 = 1<<3
@@ -75,6 +77,7 @@ C5 = 1<<1
 C6 = 1<<0
 
 # SPI device 2, port B
+# button matrix rows
 R1 = 1<<5
 R2 = 1<<4
 R3 = 1<<3
@@ -82,7 +85,7 @@ R4 = 1<<2
 R5 = 1<<1
 R6 = 1<<0
 
-
+# Encoders
 # SPI device 0, port A
 A_CH2_OS = 1
 B_CH2_OS = 0
@@ -134,11 +137,6 @@ A_TRIG = 6
 B_TRIG = 7
 
 
-def shutdown():
-    GPIO.cleanup()
-    check_call(['sudo', 'poweroff'])
-    exit()
-
 def disable_backlight():
     bklt_en.off()
     print("backlight disabled")
@@ -147,7 +145,7 @@ def disable_backlight():
         Sock.sendall(cmd)
         sleep(CMD_WAIT)
     
-def pwm_backlight(f):
+def pwm_backlight(f): # dimming possible but mostly unused
     if (bklt_fault.value == False):
         bklt_en.on()
         bklt_en.value = f
@@ -483,7 +481,15 @@ def button_press(row, col):
             sleep(CMD_WAIT)
             
         elif (col & C3): # measure
-            pass
+           if (not Scope.Measure.Menu.is_active):
+                ActiveMenu.disable()
+                ActiveMenu = Scope.Measure.Menu
+                update_select_funcs()
+                ActiveMenu.enable()
+                ActiveMenu.display_menu()
+            elif  (Scope.Measure.Menu.is_active):
+                ActiveMenu.disable()
+                
         elif (col & C4): # cursors
             if (not Scope.Cursor.Menu.is_active):
                 ActiveMenu.disable()
@@ -626,25 +632,22 @@ def button_press(row, col):
             Scope.Channel4.zero_offset()
             
 
-# configure shutdown button
-#pwr_btn = Button(3, pull_up=True, bounce_time=0.2, hold_time=2)
-#pwr_btn.when_held = shutdown
-
 # Set board power
 pwr_en = DigitalOutputDevice(5)
 pwr_fault = DigitalInputDevice(6, pull_up=True)
 pwr_fault.when_activated = disable_power
-
 enable_power()
 
 # Set up SPI and interrupt pins
 spi = spidev.SpiDev()
+# in case bit banging were necessary
 #cs0 = DigitalOutputDevice( 8, active_high=False)
 #cs1 = DigitalOutputDevice( 7, active_high=False)
 cs2 = DigitalOutputDevice(12, active_high=False)
 
 interrupt1 = DigitalInputDevice(13)
 interrupt2 = DigitalInputDevice(16)
+# cut trace on board and rerouted
 #interrupt3 = DigitalInputDevice(19)
 spi_reset = DigitalOutputDevice(19, active_high=False)
 interrupt4 = DigitalInputDevice(20)
@@ -698,6 +701,7 @@ if (SCOPELESS):
     Sock = DummySocket()
 else:
     # Set up socket to scope
+    # Code provided by Agilent/Keysight with minor modifications
     remote_ip = "169.254.254.254"
     port = 5024
 
@@ -726,6 +730,7 @@ else:
             break
         
         except OSError as e:
+            # wait and try to connect again
             print(e)
             print("Unable to connect, trying again in 30s")
             
@@ -747,7 +752,7 @@ else:
     lcd.write_string("Connected!")
     sleep(1)
 
-    print_reply()
+    print_reply() # greeting message
 
 
 def main():
@@ -762,10 +767,10 @@ def main():
     
  
     try: 
-        #events = 0
         c = 0
         
         while True:
+            # drive button matrix columns
             if (c >= 6):
                 c = 0
             drive_col = ~(1 << c)
@@ -781,14 +786,14 @@ def main():
             spi.xfer2(to_send)
             cs2.off()
             
-            if (interrupt4.value):
+            if (interrupt4.value): # button pressed
                 to_send = [SPI_READ, INTFB]
                 cs2.on()
                 spi.xfer2(to_send)
                 int_flag = spi.readbytes(1)
                 cs2.off()
                 
-                sleep(DEBOUNCE)
+                sleep(DEBOUNCE)    # debounce
                 
                 to_send = [SPI_READ, GPIOB]
                 cs2.on()
@@ -801,21 +806,22 @@ def main():
                 spi.xfer(to_send)
                 cs2.off()
                 
-                if (int_flag[0] & button_io[0] > 0):
+                if (int_flag[0] & button_io[0] > 0): # real press
                     release = button_io
                     to_send = [SPI_READ, GPIOB]
                     cs2.on()
                     spi.xfer2(to_send)
-                    while(release[0] != 0):
+                    while(release[0] != 0):          # wait until release
                         release = spi.readbytes(1)
                         sleep(0.01)
                     cs2.off()
                     
-                    button_press(button_io[0], ~drive_col)
+                    button_press(button_io[0], ~drive_col)  # perform action
                     
                     
             spi.close()
             
+            # check for encoder change
             if (interrupt5.value):
                 EncoderBank0A.update_encoders()
             
@@ -829,8 +835,8 @@ def main():
                 EncoderBank1B.update_encoders()
             
         
-    except Exception as e:
-        print(e)
+    except Exception as e: # restart the program if anything goes wrong
+        print(e)           # (usually happens when string parsing)
         ActiveMenu.disable()
         lcd.clear()
         lcd.write_string("An unexpected error\r\noccurred.\r\n\nRestarting...")
@@ -842,7 +848,7 @@ def main():
         execv(__file__, argv)
         
         
-class ToggleSetting:
+class ToggleSetting: # used for toggle menus
     def __init__(self, bool_value):
         self.value = bool_value
 
@@ -907,92 +913,6 @@ class BlankMenu(Menu):
         
     def back(self):
         return
-
-"""
-class TextMenu(Menu):
-    is_active = False
-    menu_text = ""
-    splash_text = ""
-    
-    def __init__(self, menu_text, splash_text):
-        super().__init__()
-        self.menu_text = menu_text
-        self.splash_text = splash_text
-        
-    def enable(self):
-        if (len(splash_text) > 0):
-            self.is_active = True
-            
-    def disable(self):
-        if (self.is_active):
-            self.is_active = False
-            lcd.clear()
-            
-    def display_menu(self):
-        if (self.is_active):
-            lcd.clear()
-            l = len(splash_text)
-            if (l =< 20):
-                lcd.write_string(self.splash_text)
-            elif (l > 20 and l <= 40):
-                lcd.write_string(self.splash_text[0:19])
-                lcd.cursor_pos = (1,0)
-                lcd.write_string(self.splash_text[20:])
-            elif (l > 40 and l <= 60):
-                lcd.write_string(self.splash_text[0:19])
-                lcd.cursor_pos = (1,0)
-                lcd.write_string(self.splash_text[20:39])
-                lcd.cursor_pos = (2,0)
-                lcd.write_string(self.splash_text[40:])
-            elif (l > 60 and l <= 80):
-                lcd.write_string(self.splash_text[0:19])
-                lcd.cursor_pos = (1,0)
-                lcd.write_string(self.splash_text[20:39])
-                lcd.cursor_pos = (2,0)
-                lcd.write_string(self.splash_text[40:59])
-                lcd.cursor_pos = (3,0)
-                lcd.write_string(self.splash_text[60:])
-            else:
-                lcd.write_string(self.splash_text[0:19])
-                lcd.cursor_pos = (1,0)
-                lcd.write_string(self.splash_text[20:39])
-                lcd.cursor_pos = (2,0)
-                lcd.write_string(self.splash_text[40:59])
-                lcd.cursor_pos = (3,0)
-                lcd.write_string(self.splash_text[60:79])
-        
-    def display_cursor(self):
-        return
-        
-    def increment_cursor(self):
-        return
-        
-    def decrement_cursor(self):
-        return
-            
-    def select(self):
-        if (not self.is_active):
-            self.container.disable()
-            global ActiveMenu 
-            ActiveMenu = self
-            update_select_funcs()
-            self.enable()
-            self.display_menu()
-        else:
-            self.active_select()
-            
-    def active_select(self):
-        return
-    
-    def back(self):
-        if (self.is_active):
-            self.disable()
-            global ActiveMenu 
-            ActiveMenu = self.container
-            update_select_funcs()
-            self.container.enable()
-            self.container.display_menu()
-"""
 
 class ToggleMenu(Menu):
     text = ""
@@ -1168,11 +1088,20 @@ class ListMenu(Menu):
             self.container.display_menu()
 
 
-class Scope:
+# with regards to the classes used within Scope,
+# a fair amount of refactoring can be done
+# e.g.: - For functions that modify the same parameter,
+#         have them call a function for common code as in Measure
+#       - Remove "SCOPELESS" clauses for functions that do not parse replies
+#       - Formatting, naming convention, unused/unnecessary  variables(?)
+#       - Add a "send_cmd" function to Scope to eliminate all of the extra
+#         "Sock.sendall(cmd)" "sleep(CMD_WAIT)" lines
+class Scope: # state modeling/commands
     
     def __init__(self):
         self.Trigger = Trigger(self)
         self.Cursor = Cursor(self)
+        self.Measure = Measure()
         self.Timebase = Timebase()
         
         self.Channel1 = Channel(1)
@@ -1180,7 +1109,6 @@ class Scope:
         self.Channel3 = Channel(3)
         self.Channel4 = Channel(4)
         self.channels = [self.Channel1, self.Channel2, self.Channel3, self.Channel4]
-        
         
         self.get_state()
     
@@ -1192,13 +1120,9 @@ class Scope:
             self.Timebase.get_state()
             self.Trigger.get_state()
             self.Cursor.get_state()
-            
+
+class Channel: # implement: probe attenuation, vernier, units
         
-
-
-class Channel: # probe attenuation, vernier, units
-    
-    probe_aten = 0                     #implement
     scale_base_b = b'+5'
     scale_base = 5
     scale_exp_b = b'+0'
@@ -1536,9 +1460,8 @@ class Channel: # probe attenuation, vernier, units
                 cmd = b'CHAN' + str(self.number).encode() + b':INV 0\r\n'
                 Sock.sendall(cmd)
                 self.inverted.value = False
-    
-    
-class Timebase: #vernier
+       
+class Timebase: # implement: vernier, window scale/position
     mode = b'MAIN'
     reference = b'CENT'
     scale_base_b = b'+5'
@@ -1552,7 +1475,7 @@ class Timebase: #vernier
     def __init__(self):
         MainMode = MenuItem("Main")
         MainMode.select = self.set_mode_main
-        WindowMode = MenuItem("Window")            # unimplemented: window scale/position
+        WindowMode = MenuItem("Window")            
         WindowMode.select = self.set_mode_window
         XYMode = MenuItem("XY")
         XYMode.select = self.set_mode_xy
@@ -1766,8 +1689,7 @@ class Timebase: #vernier
             Sock.sendall(cmd)
             sleep(CMD_WAIT)
 
-
-class Trigger: #holdoff, external probe
+class Trigger: # implement: holdoff, external probe
     
     sweep = b'AUTO'
     mode = b'EDGE'
@@ -1829,11 +1751,11 @@ class Trigger: #holdoff, external probe
         SourceCh3.select = self.set_source_ch3
         SourceCh4 = MenuItem("Channel 4")
         SourceCh4.select = self.set_source_ch4
-        SourceExternal = MenuItem("External")
-        SourceExternal.select = self.set_source_external
+        #SourceExternal = MenuItem("External")
+        #SourceExternal.select = self.set_source_external
         SourceLine = MenuItem("Line")
         SourceLine.select = self.set_source_line
-        SourceMenuItems = [SourceCh1, SourceCh2, SourceCh3, SourceCh4, SourceExternal, SourceLine]
+        SourceMenuItems = [SourceCh1, SourceCh2, SourceCh3, SourceCh4, SourceLine] #, SourceExternal]
         SourceMenu = ListMenu()
         SourceMenu.set_menu(SourceMenuItems)
         SourceMenu.set_text("Source")
@@ -2043,9 +1965,6 @@ class Trigger: #holdoff, external probe
                 cmd = b'TRIG:EDGE:LEV ' + "{:.6E}".format(self.level).encode() + b'V\r\n'
                 Sock.sendall(cmd)
                 
-                
-    
-            
             
     """
     def enable_HFRej(self):
@@ -2192,8 +2111,7 @@ class Trigger: #holdoff, external probe
         sleep(CMD_WAIT)
         self.level = 0
 
-
-class Cursor: 
+class Cursor: # update appropriate functions for Math class
     mode = b'OFF'
     source1 = b'NONE'
     source2 = b'NONE'
@@ -2201,7 +2119,7 @@ class Cursor:
     cursor_position = 0
     cursor_select = False
  
-    def __init__(self, Scope):
+    def __init__(self, Scope): #update for math
         self.Scope = Scope
         
         # menus
@@ -2239,9 +2157,9 @@ class Cursor:
         Source1Ch3.select = self.set_source1_ch3
         Source1Ch4 = MenuItem("Channel 4")
         Source1Ch4.select = self.set_source1_ch4
-        Source1Func = MenuItem("Math")
-        Source1Func.select = self.set_source1_func
-        Source1MenuItems = [Source1Ch1, Source1Ch2, Source1Ch3, Source1Ch4, Source1Func]
+        #Source1Func = MenuItem("Math")
+        #Source1Func.select = self.set_source1_func
+        Source1MenuItems = [Source1Ch1, Source1Ch2, Source1Ch3, Source1Ch4] #, Source1Func]
         Source1Menu = ListMenu()
         Source1Menu.set_menu(Source1MenuItems)
         Source1Menu.set_text("X1Y1 source")
@@ -2254,9 +2172,9 @@ class Cursor:
         Source2Ch3.select = self.set_source2_ch3
         Source2Ch4 = MenuItem("Channel 4")
         Source2Ch4.select = self.set_source2_ch4
-        Source2Func = MenuItem("Math")
-        Source2Func.select = self.set_source2_func
-        Source2MenuItems = [Source2Ch1, Source2Ch2, Source2Ch3, Source2Ch4, Source2Func]
+        #Source2Func = MenuItem("Math")
+        #Source2Func.select = self.set_source2_func
+        Source2MenuItems = [Source2Ch1, Source2Ch2, Source2Ch3, Source2Ch4] #, Source2Func]
         Source2Menu = ListMenu()
         Source2Menu.set_menu(Source2MenuItems)
         Source2Menu.set_text("X2Y2 source")
@@ -2524,7 +2442,7 @@ class Cursor:
                 
             self.get_cursor_pos()
         
-    def set_source1_func(self): # update this function once math implemented
+    def set_source1_func(self): # update for Math
         if(False):
             self.source1 = b'FUNC'
             cmd = b'MARK:X1Y1 ' + self.source1 + b'\r\n'
@@ -2584,7 +2502,7 @@ class Cursor:
                 
             self.get_cursor_pos()
         
-    def set_source2_func(self): # update this function once math implemented
+    def set_source2_func(self): # update for Math
         if(False):
             self.source2 = b'FUNC'
             cmd = b'MARK:X2Y2 ' + self.source2 + b'\r\n'
@@ -2596,7 +2514,337 @@ class Cursor:
                 
             self.get_cursor_pos()
             
-
+class Measure: # update appropriate functions for Math class    
+               # add ability to change thresholds, other settings if needed
+    
+    source1 = b'CHAN1'
+    source2 = b'CHAN2'
+    
+    def __init__(self): #update for math
+        Clear = MenuItem("Clear")
+        Clear.select = self.clear
+        
+        S1Ch1 = MenuItem("Channel 1")
+        S1Ch1.select = self.set_source1_ch1
+        S1Ch2 = MenuItem("Channel 2")
+        S1Ch2.select = self.set_source1_ch2
+        S1Ch3 = MenuItem("Channel 3")
+        S1Ch3.select = self.set_source1_ch3
+        S1Ch4 = MenuItem("Channel 4")
+        S1Ch4.select = self.set_source1_ch4
+        #S1Func = MenuItem("Math")
+        #S1Func.select = self.set_source1_func
+        Source1MenuItems = [S1Ch1, S1Ch2, S1Ch3, S1Ch4] #, S1Func] # external probe is also an option
+        Source1 = ListMenu()
+        Source1.set_menu(Source1MenuItems)
+        Source1.set_text("Source 1")
+        
+        S2Ch1 = MenuItem("Channel 1")
+        S2Ch1.select = self.set_source2_ch1
+        S2Ch2 = MenuItem("Channel 2")
+        S2Ch2.select = self.set_source2_ch2
+        S2Ch3 = MenuItem("Channel 3")
+        S2Ch3.select = self.set_source2_ch3
+        S2Ch4 = MenuItem("Channel 4")
+        S2Ch4.select = self.set_source2_ch4
+        #S2Func = MenuItem("Math")
+        #S2Func.select = self.set_source2_func
+        Source2MenuItems = [S2Ch1, S2Ch2, S2Ch3, S2Ch4] #, S2Func]
+        Source2 = ListMenu()
+        Source2.set_menu(Source2MenuItems)
+        Source2.set_text("Source 1")
+        
+        ResetStat = MenuItem("Reset")
+        ResetStat.select = self.reset_statistics
+        
+        WindowMain = MenuItem("Main")
+        WindowMain.select = self.set_window_main
+        WindowZoom = MenuItem("Zoom")
+        WindowZoom.select = self.set_window_zoom
+        WindowAuto = MenuItem("Auto")
+        WindowAuto.select = self.set_window_auto
+        WindowMenuItems = [WindowMain, WindowZoom, WindowAuto]
+        Window = ListMenu()
+        Window.set_menu(WindowMenuItems)
+        Window.set_text("Window")
+        
+        Counter = MenuItem("Counter")
+        Counter.select = self.counter
+        
+        Delay = MenuItem("Delay")
+        Delay.select = self.delay
+        
+        DutyCycle = MenuItem("Duty cycle")
+        DutyCycle.select = self.duty_cycle
+        
+        FallTime = MenuItem("Fall time")
+        FallTime.select = self.fall_time
+        
+        Frequency = MenuItem("Frequency")
+        Frequency.select = self.frequency
+        
+        NPulseWidth = MenuItem("Neg p width")
+        NPulseWidth.select = self.neg_pulse_width
+        
+        Overshoot = MenuItem("Overshoot")
+        Overshoot.select = self.overshoot
+        
+        Period = MenuItem("Period")
+        Period.select = self.period
+        
+        Phase = MenuItem("Phase")
+        Phase.select = self.phase
+        
+        Preshoot = MenuItem("Preshoot")
+        Preshoot.select = self.preshoot
+        
+        PulseWidth = MenuItem("Pulse width")
+        PulseWidth.select = self.pulse_width
+        
+        RiseTime = MenuItem("Rise time")
+        RiseTime.select = self.rise_time
+        
+        StdDev = MenuItem("Std dev")
+        StdDev.select = self.std_dev
+        
+        VAmp = MenuItem("V amplitude")
+        VAmp.select = self.v_amp
+        
+        VAvg = MenuItem("V average")
+        VAvg.select = self.v_avg
+        
+        VBase = MenuItem("V base")
+        VBase.select = self.v_base
+        
+        VMax = MenuItem("V max")
+        VMax.select = self.v_max
+        
+        VMin = MenuItem("V min")
+        VMin.select = self.v_min
+        
+        VPP = MenuItem("V peak-peak")
+        VPP.select = self.v_pp
+        
+        VRatio = MenuItem("V ratio")
+        VRatio.select = self.v_ratio
+        
+        VRMS = MenuItem("V RMS")
+        VRMS.select = self.v_rms
+        
+        VTop = MenuItem("V top")
+        VTop.select = self.v_top
+        
+        XMax = MenuItem("X max")
+        XMax.select = self.x_max
+        
+        XMin = MenuItem("X min")
+        XMin.select = self.x_min
+        
+        MeasureMenuItems = [Clear, ResetStat, Source1, Source2, Window, 
+            Counter, Delay, DutyCycle, FallTime, Frequency, NPulseWidth, Overshoot,
+            Period, Phase, Preshoot, PulseWidth, RiseTime, StdDev, VAmp, VAvg,
+            VBase, VMax, VMin, VPP, VRatio, VRMS, VTop, XMax, XMin]
+            
+        self.Menu = ListMenu()
+        self.Menu.set_menu(MeasureMenuItems)
+        self.Menu.container = BlankMenu()
+    
+    def clear(self):
+        cmd = b':MEAS:CLE\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def reset_statistics(self):
+        cmd = b':MEAS:STAT:RES\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_source1(self):
+        cmd = b':MEAS:SOUR ' + self.source1 + b'\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_source2(self):
+        cmd = b':MEAS:SOUR ' + self.source1 + b',' + self.source2 + b'\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+    
+    def set_source1_ch1(self):
+        self.source1 = b'CHAN1'
+        self.set_source1()
+    
+    def set_source1_ch2(self):
+        self.source1 = b'CHAN2'
+        self.set_source1()
+    
+    def set_source1_ch3(self):
+        self.source1 = b'CHAN3'
+        self.set_source1()
+    
+    def set_source1_ch4(self):
+        self.source1 = b'CHAN4'
+        self.set_source1()
+    
+    def set_source1_func(self):
+        self.source1 = b'FUNC'
+        self.set_source1()
+        
+    def set_source2_ch1(self):
+        self.source2 = b'CHAN1'
+        self.set_source2()
+    
+    def set_source2_ch2(self):
+        self.source2 = b'CHAN2'
+        self.set_source2()
+    
+    def set_source2_ch3(self):
+        self.source2 = b'CHAN3'
+        self.set_source2()
+    
+    def set_source2_ch4(self):
+        self.source2 = b'CHAN4'
+        self.set_source2()
+    
+    def set_source2_func(self):
+        self.source2 = b'FUNC'
+        self.set_source2()
+        
+    def set_window_main(self):
+        cmd = b':MEAS:WIND MAIN\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_window_zoom(self):
+        cmd = b':MEAS:WIND ZOOM\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def set_window_auto(self):
+        cmd = b':MEAS:WIND AUTO\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def counter(self):
+        cmd = b':MEAS:COUN\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def delay(self):
+        cmd = b':MEAS:DEL\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def duty_cycle(self):
+        cmd = b':MEAS:DUTY\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def fall_time(self):
+        cmd = b':MEAS:FALL\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def frequency(self):
+        cmd = b':MEAS:FREQ\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def neg_pulse_width(self):
+        cmd = b':MEAS:NWID\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def overshoot(self):
+        cmd = b':MEAS:OVER\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def period(self):
+        cmd = b':MEAS:PER\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def phase(self):
+        cmd = b':MEAS:PHAS\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def preshoot(self):
+        cmd = b':MEAS:PRES\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def pulse_width(self):
+        cmd = b':MEAS:PWID\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def rise_time(self):
+        cmd = b':MEAS:RIS\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def std_dev(self):
+        cmd = b':MEAS:SDEV\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def v_amp(self):
+        cmd = b':MEAS:VAMP\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def v_avg(self):
+        cmd = b':MEAS:VAV\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def v_base(self):
+        cmd = b':MEAS:VBAS\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def v_max(self):
+        cmd = b':MEAS:VMAX\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def v_min(self):
+        cmd = b':MEAS:VMIN\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def v_pp(self):
+        cmd = b':MEAS:VPP\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def v_ratio(self):
+        cmd = b':MEAS:VRAT\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def v_rms(self):
+        cmd = b':MEAS:VRMS\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def v_top(self):
+        cmd = b':MEAS:VTOP\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def x_max(self):
+        cmd = b':MEAS:XMAX\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+        
+    def x_min(self):
+        cmd = b':MEAS:XMIN\r\n'
+        Sock.sendall(cmd)
+        sleep(CMD_WAIT)
+    
+            
 class Encoder:
     a = 0
     b = 0
@@ -2604,7 +2852,7 @@ class Encoder:
     raw_count = 0
     clockwise = False
     
-    sensitivity = 1
+    sensitivity = 1 # higher = less sensitive, modify for instances (e.g. select knob)
     count = 0
     
     detent = False

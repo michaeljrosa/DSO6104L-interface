@@ -481,7 +481,7 @@ def button_press(row, col):
             sleep(CMD_WAIT)
             
         elif (col & C3): # measure
-           if (not Scope.Measure.Menu.is_active):
+            if (not Scope.Measure.Menu.is_active):
                 ActiveMenu.disable()
                 ActiveMenu = Scope.Measure.Menu
                 update_select_funcs()
@@ -1174,7 +1174,7 @@ class Channel: # implement: probe attenuation, vernier, units
             
             ProbeSettingsMenu = MenuItem("Probe settings") #implement
             
-            ChannelMenuItems = [CouplingMenu, ImpedanceMenu, BWLimitMenu, InvertMenu, ProbeSettingsMenu]
+            ChannelMenuItems = [CouplingMenu, ImpedanceMenu, BWLimitMenu, InvertMenu] #, ProbeSettingsMenu]
             
             self.Menu = ListMenu()
             self.Menu.set_menu(ChannelMenuItems)
@@ -1783,7 +1783,7 @@ class Trigger: # implement: holdoff, external probe
         SweepNormal.select = self.set_sweep_normal
         SweepMenu.set_options(SweepAuto, SweepNormal, self.SweepIsAuto)
         
-        TriggerMenuItems = [SweepMenu, CouplingMenu, RejectMenu, NRejectMenu, SlopeMenu, SourceMenu]
+        TriggerMenuItems = [SourceMenu, SweepMenu, CouplingMenu, RejectMenu, NRejectMenu, SlopeMenu]
         
         self.Menu = ListMenu()
         self.Menu.set_menu(TriggerMenuItems)
@@ -2552,7 +2552,7 @@ class Measure: # update appropriate functions for Math class
         Source2MenuItems = [S2Ch1, S2Ch2, S2Ch3, S2Ch4] #, S2Func]
         Source2 = ListMenu()
         Source2.set_menu(Source2MenuItems)
-        Source2.set_text("Source 1")
+        Source2.set_text("Source 2")
         
         ResetStat = MenuItem("Reset")
         ResetStat.select = self.reset_statistics
